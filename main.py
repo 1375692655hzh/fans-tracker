@@ -201,6 +201,9 @@ def sync(date: str = "") -> int:
         tdoc.sync_day(day, settings, log, date)
     except tdoc.TDocError as e:
         log.error(f"腾讯文档写入失败: {e}")
+        log.error("排查: ① file_id 是否正确(控制台设置页改) "
+                  "② 授权账号对该表格是否有编辑权限 "
+                  "③ Token 失效则 python main.py tdoc-auth 重新授权")
         return 2
     hist.mark_synced(data, date)
     hist.save(data)
