@@ -1,0 +1,29 @@
+# fans-tracker 全局配置
+browser:
+  # auto: 先试 CDP 接管本机 Chrome(9222 调试口, 复用日常登录态),
+  #       不通则逐平台用 profiles/<平台> 独立登录态窗口
+  # cdp: 只走 CDP(失败报错) | own: 只走独立 profile
+  mode: auto
+  cdp_url: http://127.0.0.1:9222
+  channel: chromium        # chromium(自带) / chrome / msedge
+  headless: false          # 独立 profile 模式是否无头(反爬考虑默认有头)
+
+tdoc:
+  # 【腾讯文档】AI-IP社媒数据统计
+  file_id: DQU9YSmROcG9jWHNW
+  header:
+    - 账号所有人
+    - 所属平台
+    - 账号名称
+    - 阅读/播放量
+    - 内容数
+    - 增粉
+    - 环比上周
+    - 累计粉丝
+    - 上周增粉数据
+
+crawl:
+  retry: 1                 # 单账号失败重试次数
+  page_wait_ms: 2500       # SPA 渲染轮询间隔
+  page_rounds: 8           # 轮询次数
+  nav_timeout_ms: 45000

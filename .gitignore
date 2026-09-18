@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+profiles/
+logs/
+data/
+.env
+secret.local.json
+*.tmp
