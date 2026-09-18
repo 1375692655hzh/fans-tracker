@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}设置{% endblock %}
+{% block body %}
+<div class="card">
+  <h3>YouTube API</h3>
+  <p class="muted">Google Cloud → 启用 YouTube Data API v3 → 创建 API 密钥。
+  当前状态: <span id="key-state" class="badge"></span></p>
+  <div class="row">
+    <input id="yt-key" class="grow" placeholder="粘贴 API Key (AIza…)">
+    <button id="btn-key">保存</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>定时自动化</h3>
+  <p class="muted" id="task-state"></p>
+  <div class="row">
+    <label class="inline"><input type="checkbox" id="sc-on" checked> 启用每天定时</label>
+    <label class="inline">时间
+      <input type="number" id="sc-h" min="0" max="23" value="9" style="width:5em"> :
+      <input type="number" id="sc-m" min="0" max="59" value="0" style="width:5em">
+    </label>
+    <button id="btn-sched">保存并生效</button>
+  </div>
+  <p class="muted">改时间立即重注册 Windows 计划任务; 另有「开机登录补跑」,
+  错过定时(电脑关机)开机后自动补。当天已完成则自动跳过, 不会重复写表。</p>
+</div>
+
+<div class="card">
+  <h3>浏览器</h3>
+  <div class="row">
+    <label class="inline"><input type="checkbox" id="hl"> 静默(无头)模式 —— 后台抓取不弹窗口</label>
+    <button id="btn-hl">保存</button>
+  </div>
+  <p class="muted">个别平台反爬严格时若抓不到, 关掉静默改用有头窗口再试。
+  抓取失败截图在 logs/screenshots/。</p>
+</div>
+
+<div class="card">
+  <h3>腾讯文档</h3>
+  <p>每日数据写入 file_id=<code id="tdoc-id"></code> 的当日日期 sheet。
+  Token 失效时用 tencent-docs skill 重新授权一次即可。</p>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+async function load() {
+  const s = await (await fetch("/api/settings")).json();
+  const badge = document.getElementById("key-state");
+  badge.textContent = s.youtube_key_set ? "已配置 …" + s.youtube_key_tail : "未配置";
+  badge.className = "badge " + (s.youtube_key_set ? "ok" : "warn");
+  document.getElementById("sc-on").checked = s.schedule.enabled;
+  document.getElementById("sc-h").value = s.schedule.hour;
+  document.getElementById("sc-m").value = s.schedule.minute;
+  document.getElementById("hl").checked = s.headless;
+  document.getElementById("tdoc-id").textContent = s.tdoc_file_id;
+  document.getElementById("task-state").textContent =
+    s.task.registered ? "Windows 计划任务已注册: " + s.task.raw
+                      : "计划任务未注册(保存下面设置即可注册)";
+}
+async function post(body) {
+  const r = await (await fetch("/api/settings", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)})).json();
+  alert(r.msg); load();
+}
+document.getElementById("btn-key").onclick = () =>
+  post({youtube_key: document.getElementById("yt-key").value.trim()});
+document.getElementById("btn-sched").onclick = () => post({schedule: {
+  enabled: document.getElementById("sc-on").checked,
+  hour: +document.getElementById("sc-h").value,
+  minute: +document.getElementById("sc-m").value}});
+document.getElementById("btn-hl").onclick = () =>
+  post({headless: document.getElementById("hl").checked});
+load();
+</script>
+{% endblock %}

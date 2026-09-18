@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}仪表盘{% endblock %}
+{% block body %}
+<div class="row">
+  <div class="card grow">
+    <h3>粉丝趋势 <span id="latest-date" class="muted"></span></h3>
+    <canvas id="trend" height="110"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h3>最新数据 <span id="synced-badge" class="badge"></span>
+    <button id="btn-crawl" class="right">立即抓取</button>
+  </h3>
+  <div id="crawl-status" class="muted pre"></div>
+  <table>
+    <thead><tr>
+      <th>账号所有人</th><th>所属平台</th><th>账号名称</th>
+      <th>阅读/播放量</th><th>内容数</th><th>增粉</th><th>环比上周</th>
+      <th>累计粉丝</th><th>上周增粉</th><th>状态</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const fmt = v => (v === null || v === undefined) ? "-" : v;
+let pollTimer = null;
+
+async function loadData() {
+  const r = await (await fetch("/api/data")).json();
+  document.getElementById("latest-date").textContent =
+    r.latest_date ? `(${r.latest_date})` : "(暂无数据)";
+  document.getElementById("synced-badge").textContent =
+    r.synced ? "今日已同步到腾讯文档 ✓" : "今日未同步";
+  document.getElementById("synced-badge").className =
+    "badge " + (r.synced ? "ok" : "warn");
+  const tb = document.getElementById("rows");
+  tb.innerHTML = (r.rows || []).map(x => {
+    const bad = Object.keys(x.errors || {}).length &&
+      x.followers === null;
+    return `<tr>
+      <td>${x.owner}</td><td>${x.platform}</td><td>${x.name}</td>
+      <td>${fmt(x.views)}</td><td>${fmt(x.content)}</td>
+      <td>${fmt(x.daily)}</td><td>${fmt(x.wow)}</td>
+      <td><b>${fmt(x.followers)}</b></td><td>${fmt(x.last_week)}</td>
+      <td>${bad ? `<span class="badge warn" title="${esc(JSON.stringify(x.errors))}">失败</span>`
+                : (Object.keys(x.errors||{}).length
+                   ? `<span class="badge" title="${esc(JSON.stringify(x.errors))}">部分</span>`
+                   : '<span class="badge ok">✓</span>')}</td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="10" class="muted">还没有数据, 点「立即抓取」或等每天定时任务</td></tr>';
+  drawChart(r);
+}
+
+function esc(s){return s.replace(/"/g,"&quot;").replace(/</g,"&lt;")}
+
+const palette = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
+                 "#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac",
+                 "#86bcb6","#d37295"];
+function drawChart(r) {
+  const el = document.getElementById("trend");
+  if (!el || !r.dates.length) return;
+  const sets = Object.entries(r.series || {}).slice(0, 12).map(([k, s], i) => ({
+    label: s.label, data: s.points, borderColor: palette[i % palette.length],
+    spanGaps: true, tension: .25, pointRadius: 2,
+  }));
+  if (window._chart) window._chart.destroy();
+  window._chart = new Chart(el, {type: "line",
+    data: {labels: r.dates, datasets: sets},
+    options: {responsive: true, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: sets.length <= 8, position: "bottom"}}}});
+}
+
+async function pollStatus() {
+  const s = await (await fetch("/api/crawl/status")).json();
+  const box = document.getElementById("crawl-status");
+  const btn = document.getElementById("btn-crawl");
+  if (s.running) {
+    btn.disabled = true; btn.textContent = "抓取中…";
+    const lines = (s.tail || "").trim().split("\n");
+    box.className = "muted pre";
+    box.textContent = lines.slice(-6).join("\n");
+  } else {
+    btn.disabled = false; btn.textContent = "立即抓取";
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; loadData(); }
+  }
+}
+
+document.getElementById("btn-crawl").onclick = async () => {
+  const r = await (await fetch("/api/crawl", {method: "POST"})).json();
+  alert(r.msg);
+  if (r.ok) { pollTimer = setInterval(pollStatus, 3000); pollStatus(); }
+};
+loadData(); pollStatus();
+</script>
+{% endblock %}

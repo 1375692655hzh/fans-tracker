@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}账号管理{% endblock %}
+{% block body %}
+<div class="card">
+  <h3>添加账号 <span class="muted">同事发来主页链接 → 填这里即可, 立即生效</span></h3>
+  <form id="f-add" class="grid">
+    <label>所属平台
+      <select id="a-platform" required></select></label>
+    <label>账号所有人 <input id="a-owner" placeholder="如: 张三" required></label>
+    <label>账号名称 <input id="a-name" placeholder="留空自动抓昵称"></label>
+    <label>主页链接 <input id="a-url" placeholder="https://… (X/YouTube 不用填)"></label>
+    <label>@handle <input id="a-handle" placeholder="仅 X/YouTube: 如 owenwin888"></label>
+    <button type="submit">添加</button>
+  </form>
+  <div id="add-msg" class="muted"></div>
+</div>
+
+<div class="card">
+  <h3>账号清单</h3>
+  <table>
+    <thead><tr><th>账号所有人</th><th>所属平台</th><th>账号名称</th>
+      <th>主页链接 / @handle</th><th>登录态</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="muted">需登录的平台在本机执行一次: <code>python main.py login 平台名</code>（扫码, 长期有效）。
+  富途主页必须登录才能看, 其余平台多数匿名可抓。</p>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+let PLATFORMS = [];
+async function load() {
+  const [acc, st] = await Promise.all([
+    (await fetch("/api/accounts")).json(),
+    (await fetch("/api/settings")).json()]);
+  PLATFORMS = st.platforms;
+  const sel = document.getElementById("a-platform");
+  sel.innerHTML = PLATFORMS.map(p =>
+    `<option value="${p.id}">${p.label}${p.needs_login ? "(建议登录)" : ""}</option>`).join("");
+  sel.onchange = () => {
+    const isApi = ["x", "youtube"].includes(sel.value);
+    document.getElementById("a-url").disabled = isApi;
+    document.getElementById("a-handle").disabled = !isApi;
+  };
+  const tb = document.getElementById("rows");
+  tb.innerHTML = (acc.accounts || []).map(a => {
+    const p = PLATFORMS.find(x => x.id === a.platform) || {};
+    const ident = a.handle ? "@" + a.handle : (a.url || "");
+    return `<tr>
+      <td>${a.owner || "-"}</td><td>${a.platform_label || a.platform}</td>
+      <td>${a.name || "-"}</td>
+      <td class="ellip">${ident ? `<a href="${a.handle ? (a.platform === 'x' ? 'https://x.com/' + a.handle : 'https://youtube.com/@' + a.handle) : a.url}" target="_blank">${ident}</a>` : "-"}</td>
+      <td>${p.needs_login ? "建议登录" : "-"}</td>
+      <td><button class="del" data-p="${a.platform}" data-u="${a.url || ''}" data-h="${a.handle || ''}">删除</button></td>
+    </tr>`;
+  }).join("");
+}
+
+document.getElementById("f-add").onsubmit = async e => {
+  e.preventDefault();
+  const body = {
+    platform: v("a-platform"), owner: v("a-owner"), name: v("a-name"),
+    url: v("a-url"), handle: v("a-handle")};
+  const r = await (await fetch("/api/accounts", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+  document.getElementById("add-msg").textContent = r.msg;
+  if (r.ok) { e.target.reset(); load(); }
+};
+const v = id => document.getElementById(id).value.trim();
+
+document.getElementById("rows").addEventListener("click", async e => {
+  if (!e.target.classList.contains("del")) return;
+  if (!confirm("确认删除该账号?")) return;
+  const r = await (await fetch("/api/accounts", {method: "DELETE",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({platform: e.target.dataset.p,
+      url: e.target.dataset.u, handle: e.target.dataset.h})})).json();
+  if (!r.ok) alert(r.msg);
+  load();
+});
+load();
+</script>
+{% endblock %}

@@ -6,7 +6,19 @@ browser:
   mode: auto
   cdp_url: http://127.0.0.1:9222
   channel: chromium        # chromium(自带) / chrome / msedge
-  headless: false          # 独立 profile 模式是否无头(反爬考虑默认有头)
+  headless: true           # 静默(无头)后台抓取不弹窗; 个别平台反爬严时改 false
+
+# 定时自动化(网页「设置」页可改, 保存即重注册 Windows 计划任务)
+schedule:
+  enabled: true
+  hour: 9
+  minute: 0
+
+# Web 控制台(python main.py web)
+web:
+  host: 127.0.0.1
+  port: 8787
+  auto_open: false         # 改 true 则启动时自动打开浏览器标签
 
 tdoc:
   # 【腾讯文档】每日社媒数据表

@@ -34,14 +34,41 @@
 
 ```bash
 pip install -r requirements.txt
-python main.py status          # 配置/账号/历史/腾讯文档连通性一览
-python main.py crawl           # 抓全部账号 → 本地历史 → 写腾讯文档
-python main.py sync            # 只重写今天的腾讯文档 sheet(可反复执行)
-python main.py daily           # 计划任务入口(幂等: 今天做过就跳过)
+python main.py setup        # 一键初始化: 依赖→浏览器内核→计划任务→桌面快捷方式
+python main.py web          # 打开控制台(图表/账号管理/设置/手动抓取)
+python main.py status       # 配置/账号/历史/腾讯文档连通性一览
+python main.py crawl        # 抓全部账号 → 本地历史 → 写腾讯文档
+python main.py sync         # 只重写今天的腾讯文档 sheet(可反复执行)
+python main.py daily        # 计划任务入口(幂等: 今天做过就跳过)
 python main.py login xueqiu    # 需登录平台扫码一次(profiles/ 持久化)
 python main.py probe <URL> --spec futu   # 调试: 看页面提取候选
-python seed_history.py         # 一次性导入 auto-publisher 历史(已做过)
+python seed_history.py      # 一次性导入 auto-publisher 历史(可选)
 ```
+
+## 新用户下载上手(3 步)
+
+1. **下载解压 → 双击 `setup.bat`**（自动装依赖、浏览器内核、注册
+   每天 9:00 计划任务、在桌面创建「粉丝数据追踪控制台」快捷方式）
+2. 双击桌面快捷方式打开**控制台网页**：
+   - 「账号管理」页添加账号（账号所有人-所属平台-账号名称-主页链接，
+     或 X/YouTube 的 @handle）——立即生效，无需改代码
+   - 「设置」页粘贴 YouTube API Key、改定时时间（保存即重注册计划任务）、
+     开关静默(无头)浏览
+3. 需登录的平台（富途必须，小红书/抖音建议）在命令行执行
+   `python main.py login futu` 扫码一次，长期有效
+
+腾讯文档写入用的是纯 HTTP 接口（无浏览器、无界面、静默）；
+每日抓取默认无头后台运行，**不弹任何窗口**。
+新用户还需授权一次腾讯文档（用 tencent-docs skill 扫码），
+Token 存 `secret.local.json`，长期有效。
+
+## 自动化
+
+- 计划任务 `fans-tracker-daily`（默认每天 09:00，**时间在控制台
+  「设置」页改，保存立即生效**）+ `fans-tracker-catchup`（每次登录补跑，
+  电脑 9 点关机也不漏；幂等，当天做过即跳过）
+- 也可以让 Agent/脚本直接调 `python main.py daily --force` 触发
+- 也可在控制台仪表盘点「立即抓取」手动跑一次
 
 ## 添加账号（同事发来主页链接后）
 
