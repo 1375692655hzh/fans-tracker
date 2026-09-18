@@ -4,6 +4,24 @@
 自动计算 **增粉 / 环比上周 / 上周增粉**，写入腾讯文档
 【AI-IP社媒数据统计】中以当日日期命名的 sheet（沿用表内 9 列模板）。
 
+## 环境要求
+
+- Windows 10/11（计划任务/桌面快捷方式为 Windows 专用）
+- Python 3.10+：[python.org/downloads](https://www.python.org/downloads/)
+  下载，**安装时勾选 "Add Python to PATH"**
+- 其余全部由 `setup.bat` 自动装（默认源失败自动换清华/npmmirror 镜像）
+
+## 常见问题
+
+| 症状 | 处理 |
+|---|---|
+| 双击 setup.bat 提示没有 Python | 按上面装好 Python（勾 PATH）再双击一次 |
+| 某平台抓取全失败 | 多半要登录态：`python main.py login 平台名`；失败截图在 `logs/screenshots/` |
+| 腾讯文档报 Token 失效/未授权 | `python main.py tdoc-auth` 扫码一次 |
+| 想改每天的抓取时间 | 控制台「设置」页改，保存立即生效 |
+| 想加账号 | 控制台「账号管理」页表单添加，立即生效 |
+| 抓取弹了浏览器窗口 | 设置页开「静默(无头)」；个别平台反爬严需关静默手动登录一次 |
+
 ## 支持平台与路线
 
 | 平台 | 标识 | 路线 | 粉丝 | 内容数 | 阅读/播放 | 登录态 |
