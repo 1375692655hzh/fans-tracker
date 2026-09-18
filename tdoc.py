@@ -49,6 +49,55 @@ def load_token() -> str:
     return ""
 
 
+def save_token(token: str) -> None:
+    (ROOT / "secret.local.json").write_text(
+        json.dumps({"tdoc_token": token}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+
+# ---------- 用户自助授权(扫码一次, 长期有效) ----------
+
+TOKEN_URL = "https://docs.qq.com/oauth/v2/mcp/token/get"
+AUTH_PAGE = "https://docs.qq.com/scenario/open-claw.html"
+
+
+def cli_auth() -> int:
+    """授权向导: 本地随机 code → 浏览器扫码确认 → 轮询拿 Token 存盘。"""
+    import secrets
+    import time
+    import webbrowser
+    code = secrets.token_hex(8)
+    url = f"{AUTH_PAGE}?nlc=1&authType=1&code={code}&mcp_source=desktop"
+    print("🔑 腾讯文档授权(一次即可, 长期有效)")
+    print("1) 即将打开浏览器, 请用 QQ/微信扫码并确认授权")
+    print(f"   没弹就手动访问:\n   {url}")
+    print("2) 链接 5 分钟内有效; 完成后本窗口自动继续")
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    for i in range(100):                       # 3s × 100 ≈ 5 分钟
+        time.sleep(3)
+        try:
+            with urllib.request.urlopen(
+                    f"{TOKEN_URL}?code={code}", timeout=15) as r:
+                d = json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            print(f"❌ 授权失败: token/get 请求失败: {e}")
+            return 1
+        tok = ((d.get("data") or {}).get("token") or d.get("token") or "")
+        if tok:
+            save_token(tok)
+            print("✅ 授权成功, Token 已存 secret.local.json(已 gitignore)")
+            return 0
+        if d.get("error") or d.get("code") in (-1, 1):
+            print("❌ 授权失败:", json.dumps(d, ensure_ascii=False)[:200])
+            return 1
+        print(f"  等待浏览器完成授权… ({(i + 1) * 3}s)")
+    print("❌ 超时。重新运行: python main.py tdoc-auth")
+    return 1
+
+
 class SheetClient:
     def __init__(self, token: str = ""):
         self.token = token or load_token()

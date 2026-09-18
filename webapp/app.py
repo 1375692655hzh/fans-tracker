@@ -174,8 +174,10 @@ def api_settings():
                 if line.startswith("YOUTUBE_API_KEY="):
                     key = line.split("=", 1)[1].strip()
         sched = settings.get("schedule") or {}
+        import tdoc
         return jsonify({
             "youtube_key_set": bool(key), "youtube_key_tail": key[-6:],
+            "tdoc_token_ok": bool(tdoc.load_token()),
             "tdoc_file_id": (settings.get("tdoc") or {}).get("file_id"),
             "headless": bool((settings.get("browser") or {})
                              .get("headless", False)),

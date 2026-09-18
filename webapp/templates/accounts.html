@@ -22,8 +22,9 @@
       <th>主页链接 / @handle</th><th>登录态</th><th></th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
-  <p class="muted">需登录的平台在本机执行一次: <code>python main.py login 平台名</code>（扫码, 长期有效）。
-  富途主页必须登录才能看, 其余平台多数匿名可抓。</p>
+  <p class="muted" id="login-hints"></p>
+  <p class="muted">扫码一次长期有效; 富途主页必须登录才能看, 其余多数匿名可抓。
+  抓不到时先看仪表盘的失败标记和 logs/screenshots/ 截图。</p>
 </div>
 {% endblock %}
 
@@ -43,6 +44,14 @@ async function load() {
     document.getElementById("a-url").disabled = isApi;
     document.getElementById("a-handle").disabled = !isApi;
   };
+  // 按已配账号动态生成登录命令提示
+  const need = [...new Set((acc.accounts || [])
+    .filter(a => (PLATFORMS.find(x => x.id === a.platform) || {}).needs_login)
+    .map(a => a.platform))];
+  document.getElementById("login-hints").innerHTML = need.length
+    ? "以下已配平台建议扫码登录一次(执行对应命令): "
+      + need.map(p => `<code>python main.py login ${p}</code>`).join(" ")
+    : "当前账号都不强制登录, 添加后即可抓取";
   const tb = document.getElementById("rows");
   tb.innerHTML = (acc.accounts || []).map(a => {
     const p = PLATFORMS.find(x => x.id === a.platform) || {};

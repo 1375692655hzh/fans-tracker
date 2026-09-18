@@ -258,6 +258,7 @@ def status() -> None:
               + ", ".join(s.get("sheet_name", "?") for s in sheets[:15]))
     except tdoc.TDocError as e:
         print(f"  Token/写入不可用: {e}")
+        print("  → 执行 python main.py tdoc-auth 扫码授权一次即可")
 
 
 def login(platform: str) -> int:
@@ -286,7 +287,8 @@ def web() -> int:
 
 
 def setup() -> int:
-    """新用户一键初始化: 依赖检查 → 浏览器内核 → 计划任务 → 桌面快捷方式。"""
+    """新用户一键初始化: 依赖检查 → 浏览器内核 → 计划任务 → 授权 → 快捷方式。"""
+    import subprocess
     import tasks
     ok_all = True
 
@@ -300,8 +302,12 @@ def setup() -> int:
             missing.append(pkg)
     if missing:
         print(f"   缺少: {', '.join(missing)} → pip install…")
-        import subprocess
         r = subprocess.run([sys.executable, "-m", "pip", "install", *missing])
+        if r.returncode != 0:            # 国内网络兜底: 清华镜像
+            print("   默认源失败, 换清华镜像重试…")
+            r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", *missing,
+                 "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
         ok_all &= (r.returncode == 0)
     else:
         print("   ✓ 齐全")
@@ -314,9 +320,16 @@ def setup() -> int:
         print("   ✓ 就绪")
     except Exception:
         print("   缺内核 → playwright install chromium…")
-        import subprocess
+        import os
         r = subprocess.run([sys.executable, "-m", "playwright", "install",
                             "chromium"])
+        if r.returncode != 0:            # 国内下载兜底: npmmirror
+            print("   默认源失败, 换 npmmirror 镜像重试…")
+            env = {**os.environ, "PLAYWRIGHT_DOWNLOAD_HOST":
+                   "https://npmmirror.com/mirrors/playwright"}
+            r = subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                env=env)
         ok_all &= (r.returncode == 0)
 
     print("3) 注册计划任务(时间读 settings.yaml schedule)…")
@@ -325,7 +338,22 @@ def setup() -> int:
                                         sc.get("minute", 0),
                                         sc.get("enabled", True)))
 
-    print("4) 创建桌面快捷方式…")
+    print("4) 腾讯文档授权…")
+    import tdoc
+    if tdoc.load_token():
+        print("    ✓ Token 已存在(不用再授权)")
+    else:
+        print("    需要一次性扫码授权(弹浏览器, QQ/微信确认, 之后长期有效)")
+        try:
+            ans = input("    现在开始授权? [回车=是 / n=稍后] ").strip().lower()
+        except EOFError:
+            ans = "n"
+        if ans in ("", "y", "yes"):
+            ok_all &= (tdoc.cli_auth() == 0)
+        else:
+            print("    稍后记得执行: python main.py tdoc-auth")
+
+    print("5) 创建桌面快捷方式…")
     try:
         wcfg = load_settings().get("web") or {}
         link = tasks.create_desktop_shortcut(
@@ -336,9 +364,9 @@ def setup() -> int:
 
     print("\n" + "=" * 46)
     print("完成 ✓  下一步:")
-    print("  python main.py web        # 打开控制台(添加账号/看图表)")
-    print("  python main.py login futu # 富途等需登录平台扫码一次")
-    print("  python main.py crawl      # 手动跑一次全量抓取")
+    print("  python main.py web            # 打开控制台(添加账号/看图表)")
+    print("  python main.py login <平台>   # 富途等需登录平台扫码一次")
+    print("  python main.py crawl          # 手动跑一次全量抓取")
     if not ok_all:
         print("  ⚠ 有步骤失败, 按上面提示处理后重跑 setup")
     return 0 if ok_all else 1
@@ -348,7 +376,7 @@ def main():
     parser = argparse.ArgumentParser(description="fans-tracker 多平台粉丝追踪")
     parser.add_argument("cmd", nargs="?", default="crawl",
                         choices=["crawl", "sync", "daily", "login", "probe",
-                                 "status", "web", "setup"])
+                                 "status", "web", "setup", "tdoc-auth"])
     parser.add_argument("--platforms", help="逗号分隔平台过滤, 如 futu,xueqiu")
     parser.add_argument("--no-sync", action="store_true",
                         help="只抓取不写腾讯文档")
@@ -388,6 +416,9 @@ def main():
         sys.exit(web())
     if args.cmd == "setup":
         sys.exit(setup())
+    if args.cmd == "tdoc-auth":
+        import tdoc
+        sys.exit(tdoc.cli_auth())
 
 
 if __name__ == "__main__":

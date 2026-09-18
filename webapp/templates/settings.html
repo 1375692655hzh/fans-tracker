@@ -39,7 +39,10 @@
 <div class="card">
   <h3>腾讯文档</h3>
   <p>每日数据写入 file_id=<code id="tdoc-id"></code> 的当日日期 sheet。
-  Token 失效时用 tencent-docs skill 重新授权一次即可。</p>
+  授权状态: <span id="tdoc-token" class="badge"></span></p>
+  <p class="muted">未授权/失效时, 在本项目目录执行
+  <code>python main.py tdoc-auth</code> —— 会打开浏览器用 QQ/微信扫码确认一次,
+  之后长期有效(纯接口写入, 不弹窗口)。</p>
 </div>
 {% endblock %}
 
@@ -55,6 +58,9 @@ async function load() {
   document.getElementById("sc-m").value = s.schedule.minute;
   document.getElementById("hl").checked = s.headless;
   document.getElementById("tdoc-id").textContent = s.tdoc_file_id;
+  const tok = document.getElementById("tdoc-token");
+  tok.textContent = s.tdoc_token_ok ? "已授权 ✓" : "未授权";
+  tok.className = "badge " + (s.tdoc_token_ok ? "ok" : "warn");
   document.getElementById("task-state").textContent =
     s.task.registered ? "Windows 计划任务已注册: " + s.task.raw
                       : "计划任务未注册(保存下面设置即可注册)";
