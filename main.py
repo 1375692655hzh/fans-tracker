@@ -269,11 +269,86 @@ def login(platform: str) -> int:
     return login_mod.interactive_login(platform)
 
 
+def web() -> int:
+    """启动 Web 控制台(仪表盘/账号管理/设置)。"""
+    from webapp.app import app
+    wcfg = load_settings().get("web") or {}
+    host = wcfg.get("host", "127.0.0.1")
+    port = int(wcfg.get("port", 8787))
+    url = f"http://{host}:{port}"
+    print(f"fans-tracker 控制台: {url}  (Ctrl+C 退出)")
+    if wcfg.get("auto_open", True):
+        import threading
+        import webbrowser
+        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+    app.run(host=host, port=port, debug=False)
+    return 0
+
+
+def setup() -> int:
+    """新用户一键初始化: 依赖检查 → 浏览器内核 → 计划任务 → 桌面快捷方式。"""
+    import tasks
+    ok_all = True
+
+    print("1) 检查 Python 依赖…")
+    missing = []
+    for mod, pkg in [("flask", "flask"), ("playwright", "playwright"),
+                     ("yaml", "pyyaml"), ("requests", "requests")]:
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        print(f"   缺少: {', '.join(missing)} → pip install…")
+        import subprocess
+        r = subprocess.run([sys.executable, "-m", "pip", "install", *missing])
+        ok_all &= (r.returncode == 0)
+    else:
+        print("   ✓ 齐全")
+
+    print("2) 检查 Playwright 浏览器内核…")
+    from playwright.sync_api import sync_playwright
+    try:
+        with sync_playwright() as pw:
+            pw.chromium.launch(headless=True).close()
+        print("   ✓ 就绪")
+    except Exception:
+        print("   缺内核 → playwright install chromium…")
+        import subprocess
+        r = subprocess.run([sys.executable, "-m", "playwright", "install",
+                            "chromium"])
+        ok_all &= (r.returncode == 0)
+
+    print("3) 注册计划任务(时间读 settings.yaml schedule)…")
+    sc = load_settings().get("schedule") or {}
+    print("  ", tasks.register_schedule(sc.get("hour", 9),
+                                        sc.get("minute", 0),
+                                        sc.get("enabled", True)))
+
+    print("4) 创建桌面快捷方式…")
+    try:
+        wcfg = load_settings().get("web") or {}
+        link = tasks.create_desktop_shortcut(
+            url=f"http://127.0.0.1:{wcfg.get('port', 8787)}")
+        print("  ", link)
+    except Exception as e:
+        print("   跳过:", e)
+
+    print("\n" + "=" * 46)
+    print("完成 ✓  下一步:")
+    print("  python main.py web        # 打开控制台(添加账号/看图表)")
+    print("  python main.py login futu # 富途等需登录平台扫码一次")
+    print("  python main.py crawl      # 手动跑一次全量抓取")
+    if not ok_all:
+        print("  ⚠ 有步骤失败, 按上面提示处理后重跑 setup")
+    return 0 if ok_all else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description="fans-tracker 多平台粉丝追踪")
     parser.add_argument("cmd", nargs="?", default="crawl",
-                        choices=["crawl", "sync", "daily", "login",
-                                 "probe", "status"])
+                        choices=["crawl", "sync", "daily", "login", "probe",
+                                 "status", "web", "setup"])
     parser.add_argument("--platforms", help="逗号分隔平台过滤, 如 futu,xueqiu")
     parser.add_argument("--no-sync", action="store_true",
                         help="只抓取不写腾讯文档")
@@ -309,6 +384,10 @@ def main():
     if args.cmd == "status":
         status()
         sys.exit(0)
+    if args.cmd == "web":
+        sys.exit(web())
+    if args.cmd == "setup":
+        sys.exit(setup())
 
 
 if __name__ == "__main__":

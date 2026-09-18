@@ -44,6 +44,17 @@ accounts:
     name: ""
     url: https://weibo.com/u/7999068242
 
+  # ---- X / YouTube(走 API, 填 handle 不填 url) ----
+  - platform: x
+    owner: 我
+    name: ""
+    handle: owenwin888
+
+  - platform: youtube
+    owner: 我
+    name: ""
+    handle: Owen777win
+
   # ---- 同事账号示例(拿到链接后照此添加) ----
   # - platform: bilibili
   #   owner: 张三
@@ -59,3 +70,4 @@ accounts:
   #   owner: 王五
   #   name: ""
   #   handle: SomeChannel
+
