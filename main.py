@@ -45,8 +45,22 @@ def load_settings() -> dict:
 
 
 def load_accounts() -> list:
-    d = yaml.safe_load(
-        (ROOT / "config" / "accounts.yaml").read_text(encoding="utf-8")) or {}
+    f = ROOT / "config" / "accounts.yaml"
+    ex = ROOT / "config" / "accounts.example.yaml"
+    if not f.exists():                    # 首次使用: 从模板生成
+        try:
+            import shutil
+            if ex.exists():
+                shutil.copy(ex, f)
+                log.info("已从 accounts.example.yaml 生成 config/accounts.yaml, "
+                         "去控制台「账号管理」添加账号")
+        except Exception:
+            pass
+    try:
+        d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        log.warning("config/accounts.yaml 不存在, 先添加账号")
+        return []
     out = []
     for a in (d.get("accounts") or []):
         p = (a.get("platform") or "").strip()
@@ -381,6 +395,8 @@ def main():
     parser.add_argument("--no-sync", action="store_true",
                         help="只抓取不写腾讯文档")
     parser.add_argument("--force", action="store_true", help="daily: 忽略幂等")
+    parser.add_argument("--spec", default="",
+                        help="probe: 按指定平台的SPEC提取, 如 --spec futu")
     parser.add_argument("extra", nargs="*", help="login 平台名 / probe URL")
     args = parser.parse_args()
 
@@ -403,12 +419,9 @@ def main():
     if args.cmd == "probe":
         url = args.extra[0] if args.extra else ""
         if not url.startswith("http"):
-            print("用法: python main.py probe <主页URL> [--spec futu](需 -- 前)")
+            print("用法: python main.py probe <主页URL> [--spec futu]")
             sys.exit(1)
-        spec_key = ""
-        if "--spec" in sys.argv:
-            spec_key = sys.argv[sys.argv.index("--spec") + 1]
-        sys.exit(asyncio.run(probe(url, spec_key)))
+        sys.exit(asyncio.run(probe(url, args.spec)))
     if args.cmd == "status":
         status()
         sys.exit(0)
