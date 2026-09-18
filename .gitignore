@@ -6,3 +6,4 @@ data/
 .env
 secret.local.json
 *.tmp
+config/accounts.yaml

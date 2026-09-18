@@ -66,19 +66,21 @@ python seed_history.py      # 一次性导入 auto-publisher 历史(可选)
 ## 新用户下载上手(3 步)
 
 1. **下载解压 → 双击 `setup.bat`**（自动装依赖、浏览器内核、注册
-   每天 9:00 计划任务、在桌面创建「粉丝数据追踪控制台」快捷方式）
+   每天 9:00 计划任务、引导腾讯文档扫码授权、创建桌面快捷方式）
 2. 双击桌面快捷方式打开**控制台网页**：
    - 「账号管理」页添加账号（账号所有人-所属平台-账号名称-主页链接，
      或 X/YouTube 的 @handle）——立即生效，无需改代码
+     （首次会自动从 `accounts.example.yaml` 生成清单文件）
    - 「设置」页粘贴 YouTube API Key、改定时时间（保存即重注册计划任务）、
-     开关静默(无头)浏览
+     开关静默(无头)浏览、改要写入的腾讯文档 file_id
 3. 需登录的平台（富途必须，小红书/抖音建议）在命令行执行
    `python main.py login futu` 扫码一次，长期有效
+   （账号管理页会按你已配的账号提示要执行哪些命令）
 
 腾讯文档写入用的是纯 HTTP 接口（无浏览器、无界面、静默）；
 每日抓取默认无头后台运行，**不弹任何窗口**。
-新用户还需授权一次腾讯文档（用 tencent-docs skill 扫码），
-Token 存 `secret.local.json`，长期有效。
+新用户第一次用控制台「设置」页会提示未授权，
+执行 `python main.py tdoc-auth` 扫码一次即可（Token 存本地，不进仓库）。
 
 ## 自动化
 
@@ -90,7 +92,8 @@ Token 存 `secret.local.json`，长期有效。
 
 ## 添加账号（同事发来主页链接后）
 
-编辑 `config/accounts.yaml`，照注释加一段即可，立即生效：
+控制台「账号管理」页表单添加即可（推荐）。也可以编辑
+`config/accounts.yaml`（首次从 `accounts.example.yaml` 复制），照注释加一段：
 
 ```yaml
   - platform: douyin          # 平台标识(见上表)

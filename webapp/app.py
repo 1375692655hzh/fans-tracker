@@ -125,8 +125,12 @@ def add_account(f: Path, d: dict) -> dict:
         lines.append(f"    handle: {handle}")
     if url:
         lines.append(f"    url: {url}")
-    with open(f, "a", encoding="utf-8") as fh:   # 追加列表项, 不动已有注释
-        fh.write("\n" + "\n".join(lines) + "\n")
+    if f.exists() and "accounts:" in f.read_text(encoding="utf-8"):
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write("\n" + "\n".join(lines) + "\n")
+    else:                        # 首次: 文件不存在或没有 accounts: 头
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write("accounts:\n" + "\n".join(lines) + "\n")
     return {"ok": True, "msg": "已添加(立即生效)"}
 
 
@@ -213,6 +217,12 @@ def api_settings():
                                       settings["schedule"]["minute"],
                                       settings["schedule"]["enabled"])
         msgs.append(f"计划任务已更新: {out}")
+    if "tdoc_file_id" in d:
+        fid = (d.get("tdoc_file_id") or "").strip()
+        if fid:
+            settings.setdefault("tdoc", {})["file_id"] = fid
+            _save_yaml(f, settings)
+            msgs.append(f"腾讯文档 file_id 已更新: {fid}")
     if not msgs:
         return jsonify({"ok": False, "msg": "没有可应用的更改"})
     return jsonify({"ok": True, "msg": "; ".join(msgs)})

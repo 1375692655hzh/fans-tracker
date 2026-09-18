@@ -28,6 +28,10 @@ PLATFORM_MAP = {"futu": "futu", "xueqiu": "xueqiu", "changqiao": "changqiao",
 def main():
     import history as hist
 
+    if not SRC.exists():
+        log.warning(f"没找到 {SRC} (本机没有 auto-publisher 历史), 跳过。"
+                    "不影响正常使用, 增粉列会从第二天开始有值。")
+        return
     src = json.loads(SRC.read_text(encoding="utf-8"))
     profiles = src.get("profiles") or {}
     accounts = (yaml.safe_load(
