@@ -1,0 +1,111 @@
+# fans-tracker —— 多平台社媒账号数据追踪 + 腾讯文档自动填报
+
+每天早上 9:00 自动抓取各平台账号的 **累计粉丝 / 内容数 / 阅读·播放量**，
+自动计算 **增粉 / 环比上周 / 上周增粉**，写入腾讯文档
+【每日社媒数据表】中以当日日期命名的 sheet（沿用表内 9 列模板）。
+
+## 支持平台与路线
+
+| 平台 | 标识 | 路线 | 粉丝 | 内容数 | 阅读/播放 | 登录态 |
+|---|---|---|---|---|---|---|
+| 富途 | `futu` | Playwright 主页(统计板) | ✓ | - | ✓来访 | **需登录**(已复用 auto-publisher 登录态) |
+| 雪球 | `xueqiu` | Playwright 主页 | ✓ | ✓帖子 | - | 匿名可抓 |
+| 长桥 | `changqiao` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
+| 东方财富 | `eastmoney` | Playwright i 主页 | ✓ | - | - | 匿名可抓 |
+| 老虎 | `laohu` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
+| 同花顺 | `ths` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
+| 新浪财经 | `sina` | Playwright 微博主页 | ✓ | - | - | 匿名可抓(登录更全) |
+| B站 | `bilibili` | relation/stat API + 空间页 | ✓(API精确) | ✓投稿(999+封顶) | - | 匿名可抓 |
+| 小红书 | `xhs` | Playwright 主页 | ✓ | ✓笔记 | - | 建议登录 |
+| 抖音 | `douyin` | Playwright 主页 | ✓ | ✓作品 | - | 建议登录 |
+| 快手 | `kuaishou` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
+| X | `x` | FxTwitter 公开 API | ✓ | ✓推文数 | - | 无需 |
+| YouTube | `youtube` | Google Data API v3 | ✓订阅 | ✓视频数 | ✓累计播放 | API Key |
+| 公众号 | `weixin_gzh` | 预留(需公众号后台) | - | - | - | 未开通 |
+| 视频号 | `weixin_sph` | 预留(需视频号助手后台) | - | - | - | 未开通 |
+
+说明：某平台公开页没有的指标在表格里填 `-`，不会编数。
+抖音/快手/老虎/同花顺/小红书 的选择器基于通用规则预置，**拿到同事的真实
+主页链接后**先跑一次 `python main.py probe <链接> --spec <平台>` 确认提取
+候选，不对就调 `fetchers/browser_page.py` 里对应平台的 SPEC 正则（每平台
+一段注释好的配置）。
+
+## 使用
+
+```bash
+pip install -r requirements.txt
+python main.py status          # 配置/账号/历史/腾讯文档连通性一览
+python main.py crawl           # 抓全部账号 → 本地历史 → 写腾讯文档
+python main.py sync            # 只重写今天的腾讯文档 sheet(可反复执行)
+python main.py daily           # 计划任务入口(幂等: 今天做过就跳过)
+python main.py login xueqiu    # 需登录平台扫码一次(profiles/ 持久化)
+python main.py probe <URL> --spec futu   # 调试: 看页面提取候选
+python seed_history.py         # 一次性导入 auto-publisher 历史(已做过)
+```
+
+## 添加账号（同事发来主页链接后）
+
+编辑 `config/accounts.yaml`，照注释加一段即可，立即生效：
+
+```yaml
+  - platform: douyin          # 平台标识(见上表)
+    owner: 张三               # 账号所有人(表格第一列)
+    name: ""                  # 账号名称(留空自动抓昵称)
+    url: https://www.douyin.com/user/xxx   # 主页链接
+  - platform: x
+    owner: 李四
+    handle: elonmusk          # X/YouTube 填 @后面的字符串, 不用 url
+```
+
+## YouTube API Key
+
+1. 打开 https://console.cloud.google.com/ → 新建项目(任意名)
+2. 「API 和服务」→「启用 API」→ 搜 **YouTube Data API v3** → 启用
+3. 「凭据」→「创建凭据」→「API 密钥」→ 复制
+4. 填入本项目 `.env` 文件: `YOUTUBE_API_KEY=xxxx`
+   (免费额度每日 1 万次, 每天几十个频道绰绰有余)
+
+未配置 key 时 YouTube 账号自动跳过并在表格标错，不影响其他平台。
+
+## 登录态
+
+- **CDP 接管**：若本机 Chrome 开着调试口 9222（auto-publisher 的
+  `chrome_debug.bat`），自动接管复用其全部登录态。
+- **独立 profile**：否则逐平台用 `profiles/<平台>/` 登录态窗口。
+  futu 已从 auto-publisher 复制；其他平台需要时：
+  `python main.py login <平台>` 扫码一次，长期有效。
+- 腾讯文档 Token 自动读取（mcporter 配置 / secret.local.json），
+  过期(400006)时用 tencent-docs skill 重新授权一次即可。
+
+## 自动化（已注册）
+
+| 计划任务 | 触发 | 作用 |
+|---|---|---|
+| `fans-tracker-daily` | 每天 09:00 | 抓取+写表 |
+| `fans-tracker-catchup` | 每次登录 | 9 点没开机时补跑(幂等, 做过即跳过) |
+
+日志: `logs/daily.log`；失败截图: `logs/screenshots/`。
+
+## 目录结构
+
+```
+main.py            CLI 入口
+config/accounts.yaml  账号清单(随时加)
+config/settings.yaml  浏览器/文档/抓取参数
+fetchers/          x_fxtwitter / youtube_api / bilibili_api / browser_page(通用SPEC)
+browser.py         CDP优先 + 独立profile 双模式
+history.py         data/history.json 逐日快照(原子写)
+metrics.py         增粉/环比上周/上周增粉
+tdoc.py            腾讯文档 sheet-mcp 直连写入
+login.py           扫码登录
+seed_history.py    历史播种(auto-publisher → 本项目)
+run_daily.bat      计划任务入口
+```
+
+## 指标口径
+
+- 阅读/播放量、内容数、累计粉丝：**当日累计总量**（公开页可得口径）
+- 增粉 = 今日累计粉丝 − 上一条历史记录
+- 上周增粉 = 7天前最近值 − 14天前最近值
+- 环比上周 = 本周增粉 vs 上周增粉 百分比（上周为 0 显示「新增」）
+- 历史不足（新账号前两周）相应列填 `-`

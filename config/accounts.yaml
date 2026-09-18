@@ -1,0 +1,61 @@
+# ============================================================
+# 账号清单 —— 同事发来主页链接后按格式添加即可, 立即生效
+#
+# 字段说明:
+#   platform 平台标识(必填), 可用值:
+#     futu 富途 | xueqiu 雪球 | changqiao 长桥 | eastmoney 东方财富
+#     laohu 老虎 | ths 同花顺 | sina 新浪财经 | bilibili B站
+#     xhs 小红书 | douyin 抖音 | kuaishou 快手
+#     x X(Twitter) | youtube YouTube
+#     weixin_gzh 公众号(预留) | weixin_sph 视频号(预留)
+#   owner     账号所有人(必填, 填到表格第一列)
+#   name      账号名称(可留空, 留空则抓取时自动用平台昵称)
+#   url       账号主页链接(x/youtube 之外的平台必填)
+#   handle    仅 x / youtube 需要: @后面的字符串(不带@)
+#
+# 需要登录态的平台(xueqiu/xhs/douyin/sina 等), 先执行:
+#   python main.py login <platform>
+# ============================================================
+accounts:
+  # ---- 首批: 自有账号(来自 auto-publisher 已验证主页) ----
+  - platform: futu
+    owner: 我
+    name: ""
+    url: https://q.futunn.com/profile/26436016
+
+  - platform: xueqiu
+    owner: 我
+    name: ""
+    url: https://xueqiu.com/u/9819290735
+
+  - platform: changqiao
+    owner: 我
+    name: ""
+    url: https://longportapp.com/profiles/16287079
+
+  - platform: eastmoney
+    owner: 我
+    name: ""
+    url: https://i.eastmoney.com/3113027605865862
+
+  # 新浪财经走微博主页(新浪财经号即微博号)
+  - platform: sina
+    owner: 我
+    name: ""
+    url: https://weibo.com/u/7999068242
+
+  # ---- 同事账号示例(拿到链接后照此添加) ----
+  # - platform: bilibili
+  #   owner: 张三
+  #   name: ""
+  #   url: https://space.bilibili.com/12345678
+  #
+  # - platform: x
+  #   owner: 李四
+  #   name: ""
+  #   handle: elonmusk
+  #
+  # - platform: youtube
+  #   owner: 王五
+  #   name: ""
+  #   handle: SomeChannel
