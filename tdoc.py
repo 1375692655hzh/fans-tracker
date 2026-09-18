@@ -102,8 +102,8 @@ class SheetClient:
     def __init__(self, token: str = ""):
         self.token = token or load_token()
         if not self.token:
-            raise TDocError("未找到腾讯文档 Token: 请先用 tencent-docs skill "
-                            "授权, 或把 tdoc_token 写入 secret.local.json")
+            raise TDocError("未找到腾讯文档 Token: 在本项目目录执行 "
+                            "python main.py tdoc-auth 扫码授权一次即可")
 
     def call(self, tool: str, arguments: dict) -> dict:
         """sheet-mcp 工具名不带 sheet. 前缀; 个别环境带前缀, 自动回退。"""
@@ -131,7 +131,8 @@ class SheetClient:
                 d = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise TDocError(
-                f"HTTP {e.code}: Token 失效或无权限(400006=过期, 需重新授权)"
+                f"HTTP {e.code}: Token 失效或无权限"
+                "(400006=过期, 执行 python main.py tdoc-auth 重新授权)"
             ) from e
         except Exception as e:
             raise TDocError(f"网络请求失败: {e}") from e
