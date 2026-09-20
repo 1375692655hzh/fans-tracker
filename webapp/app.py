@@ -23,6 +23,13 @@ from fetchers.browser_page import BROWSER_PLATFORMS  # noqa: E402
 
 app = Flask(__name__)
 
+
+@app.context_processor
+def _inject_tdoc_link():
+    """导航栏腾讯文档链接: 配了才指向真表格, 没配引导去设置页。"""
+    fid = ((load_settings().get("tdoc") or {}).get("file_id") or "").strip()
+    return {"tdoc_link": f"https://docs.qq.com/sheet/{fid}" if fid else ""}
+
 CRAWL_LOG = ROOT / "logs" / "web_crawl.log"
 _state = {"running": False, "started": "", "proc": None, "tail": ""}
 _lock = threading.Lock()
@@ -359,11 +366,23 @@ def api_settings():
                                       settings["schedule"]["enabled"])
         msgs.append(f"计划任务已更新: {out}")
     if "tdoc_file_id" in d:
-        fid = (d.get("tdoc_file_id") or "").strip()
-        if fid:
-            settings.setdefault("tdoc", {})["file_id"] = fid
-            _save_yaml(f, settings)
-            msgs.append(f"腾讯文档 file_id 已更新: {fid}")
+        raw = (d.get("tdoc_file_id") or "").strip()
+        m = re.search(r"docs\.qq\.com/sheet/([A-Za-z0-9]+)", raw)
+        fid = (m.group(1) if m else re.sub(r"[^A-Za-z0-9]", "", raw)) or ""
+        # 私有配置只存 settings.local.yaml(gitignore), 公开仓库不带任何表格ID
+        import yaml
+        lf = ROOT / "config" / "settings.local.yaml"
+        local = {}
+        if lf.exists():
+            try:
+                local = yaml.safe_load(lf.read_text(encoding="utf-8")) or {}
+            except Exception:
+                local = {}
+        local.setdefault("tdoc", {})["file_id"] = fid
+        lf.write_text(yaml.safe_dump(local, allow_unicode=True, sort_keys=False),
+                      encoding="utf-8")
+        msgs.append("腾讯文档已保存(仅存本机, 不进git)"
+                    + (f", 表格: docs.qq.com/sheet/{fid}" if fid else "(已清空)"))
     if not msgs:
         return jsonify({"ok": False, "msg": "没有可应用的更改"})
     return jsonify({"ok": True, "msg": "; ".join(msgs)})
@@ -371,6 +390,7 @@ def api_settings():
 
 def _save_yaml(f: Path, d: dict):
     import yaml
+    d.setdefault("tdoc", {}).pop("file_id", None)   # 表格ID只存local, 不进git
     text = yaml.safe_dump(d, allow_unicode=True, sort_keys=False)
     f.write_text("# 由控制台自动生成; 各项含义见 README.md\n" + text,
                  encoding="utf-8")

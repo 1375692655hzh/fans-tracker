@@ -113,7 +113,10 @@ function drawGrowth(r) {
 }
 
 async function pollStatus() {
-  const s = await (await fetch("/api/crawl/status")).json();
+  let s;
+  try {
+    s = await (await fetch("/api/crawl/status")).json();
+  } catch (e) { return; }             // 控制台不在了: 静默, 点按钮时会提示
   const box = document.getElementById("crawl-status");
   const btn = document.getElementById("btn-crawl");
   if (s.running) {
@@ -128,9 +131,28 @@ async function pollStatus() {
 }
 
 document.getElementById("btn-crawl").onclick = async () => {
-  const r = await (await fetch("/api/crawl", {method: "POST"})).json();
-  alert(r.msg);
-  if (r.ok) { pollTimer = setInterval(pollStatus, 3000); pollStatus(); }
+  const btn = document.getElementById("btn-crawl");
+  const box = document.getElementById("crawl-status");
+  btn.disabled = true; btn.textContent = "启动中…";
+  box.className = "muted pre";
+  box.textContent = "正在启动抓取(浏览器平台约1-3分钟)…";
+  let r;
+  try {
+    r = await (await fetch("/api/crawl", {method: "POST"})).json();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "立即抓取";
+    box.textContent = "";
+    alert("请求失败: 控制台程序不在运行(可能刚被重启/关闭)。\n"
+      + "请刷新本页重试; 仍失败就重新运行 python main.py web 或桌面快捷方式。");
+    return;
+  }
+  if (!r.ok) {
+    btn.disabled = false; btn.textContent = "立即抓取";
+    box.textContent = "";
+    alert(r.msg);
+    return;
+  }
+  pollTimer = setInterval(pollStatus, 3000); pollStatus();
 };
 loadData(); pollStatus();
 </script>

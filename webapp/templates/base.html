@@ -12,7 +12,7 @@
   <a href="/" class="{% if request.path == '/' %}on{% endif %}">仪表盘</a>
   <a href="/accounts" class="{% if request.path == '/accounts' %}on{% endif %}">账号管理</a>
   <a href="/settings" class="{% if request.path == '/settings' %}on{% endif %}">设置</a>
-  <a href="https://docs.qq.com/sheet/YOUR_SHEET_ID" target="_blank">腾讯文档↗</a>
+  <a href="{% if tdoc_link %}{{ tdoc_link }}{% else %}/settings{% endif %}"{% if tdoc_link %} target="_blank"{% endif %}>{% if tdoc_link %}腾讯文档↗{% else %}腾讯文档(点我去配置){% endif %}</a>
 </nav>
 <main>
 {% block body %}{% endblock %}

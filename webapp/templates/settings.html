@@ -58,15 +58,16 @@
 
 <div class="card">
   <h3>腾讯文档</h3>
-  <p>每日数据写入的在线表格(浏览器打开 docs.qq.com/sheet/<span id="tdoc-id"></span>)。
+  <p>每日数据写入的在线表格(<span id="tdoc-link"></span>)。
   授权状态: <span id="tdoc-token" class="badge"></span></p>
   <div class="row">
-    <input id="tdoc-fid" class="grow" placeholder="腾讯文档 file_id(链接 /sheet/ 后面那段)">
+    <input id="tdoc-fid" class="grow" placeholder="直接粘贴表格完整链接 https://docs.qq.com/sheet/… (自动识别)">
     <button id="btn-fid">保存</button>
     <button id="btn-tdoc-auth" style="display:none">扫码授权</button>
   </div>
   <p class="muted" id="tdoc-auth-hint">未授权时点「扫码授权」——会新开授权页,
-  用 QQ/微信确认即可, 本控制台自动感知; 写入是纯接口, 日常不弹窗口。</p>
+  用 QQ/微信确认即可, 本控制台自动感知; 写入是纯接口, 日常不弹窗口。
+  表格链接只保存在本机(settings.local.yaml), 不会提交到 git。</p>
 </div>
 {% endblock %}
 
@@ -81,14 +82,15 @@ async function load() {
   document.getElementById("sc-h").value = s.schedule.hour;
   document.getElementById("sc-m").value = s.schedule.minute;
   document.getElementById("hl").checked = s.headless;
-  document.getElementById("tdoc-id").textContent = s.tdoc_file_id;
-  document.getElementById("tdoc-fid").value = s.tdoc_file_id || "";
   const tok = document.getElementById("tdoc-token");
   tok.textContent = s.tdoc_token_ok ? "已授权 ✓" : "未授权";
   tok.className = "badge " + (s.tdoc_token_ok ? "ok" : "warn");
   document.getElementById("btn-tdoc-auth").style.display =
     s.tdoc_token_ok ? "none" : "";
   document.getElementById("tdoc-fid").value = s.tdoc_file_id || "";
+  document.getElementById("tdoc-link").innerHTML = s.tdoc_file_id
+    ? `<a href="https://docs.qq.com/sheet/${s.tdoc_file_id}" target="_blank">点这里打开你的表格</a>`
+    : "还没绑定, 粘贴链接保存即可";
   document.getElementById("task-state").textContent =
     s.task.registered ? "Windows 计划任务已注册: " + s.task.raw
                       : "计划任务未注册(保存下面设置即可注册)";

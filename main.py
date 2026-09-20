@@ -36,12 +36,26 @@ log = logging.getLogger("fans")
 # ---------- 配置 ----------
 
 def load_settings() -> dict:
+    """settings.yaml ← settings.local.yaml 覆盖合并(本地文件不进git,
+    腾讯文档 file_id 这类私有配置只存 local)。"""
     try:
-        return yaml.safe_load(
+        d = yaml.safe_load(
             (ROOT / "config" / "settings.yaml").read_text(encoding="utf-8")) or {}
     except Exception as e:
         log.warning("settings.yaml 读取失败(%s), 用默认值", e)
-        return {}
+        d = {}
+    lf = ROOT / "config" / "settings.local.yaml"
+    if lf.exists():
+        try:
+            local = yaml.safe_load(lf.read_text(encoding="utf-8")) or {}
+            for k, v in local.items():
+                if isinstance(v, dict) and isinstance(d.get(k), dict):
+                    d[k].update(v)
+                else:
+                    d[k] = v
+        except Exception as e:
+            log.warning("settings.local.yaml 读取失败(%s), 忽略", e)
+    return d
 
 
 def load_accounts() -> list:

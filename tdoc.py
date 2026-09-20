@@ -262,7 +262,10 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
     hist_all = load_hist()
 
     tcfg = settings.get("tdoc") or {}
-    file_id = tcfg.get("file_id") or "YOUR_SHEET_ID"
+    file_id = tcfg.get("file_id") or ""
+    if not file_id:
+        raise TDocError("未配置腾讯文档: 控制台「设置」页粘贴表格完整链接"
+                        "(docs.qq.com/sheet/…)保存即可")
     header = tcfg.get("header") or ["账号所有人", "所属平台", "账号名称",
                                     "阅读/播放量", "内容数", "增粉", "累计粉丝"]
     date = date or hist_day.get("date") or datetime.now().strftime("%Y-%m-%d")
