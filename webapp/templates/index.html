@@ -109,7 +109,7 @@ function drawGrowth(r) {
             const total = g.totals[it.label] || 1;
             const pct = (it.parsed.y / total * 100).toFixed(0);
             return ` ${it.dataset.label}: ${it.parsed.y} (${pct}%)`;
-          }}}}});
+          }}}}}});   // label→callbacks→tooltip→plugins→options→Chart配置→Chart调用
 }
 
 async function pollStatus() {
