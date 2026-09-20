@@ -124,6 +124,28 @@ def _retryable(result: dict) -> bool:
     return result.get("followers") is None and bool(result.get("errors"))
 
 
+def _apply_content_delta(data: dict, today: str, key: str, result: dict) -> None:
+    """平台累计计数快照(content_total, 如X累计发帖) → content=24h增量的兜底。
+
+    fetcher 已直接算出 content(如X时间线计数)时不动; 只在 content 为空时
+    用作差兜底: 基准取严格早于今天的最近快照(与增粉口径一致);
+    首日无基准只存快照; 总数下降(删帖)记错误不编数。
+    """
+    total = result.get("content_total")
+    if not isinstance(total, int) or result.get("content") is not None:
+        return
+    prev = hist.prev_value(data, key, "content_total", today)
+    if prev is None:
+        result.setdefault("errors", {})["content"] = \
+            "24h发帖数明日可算(今日已记录累计发帖数基准)"
+    elif total >= prev:
+        result["content"] = total - prev
+        result.get("errors", {}).pop("content", None)
+    else:
+        result.setdefault("errors", {})["content"] = \
+            f"累计发帖数下降({prev}→{total}, 疑似删帖), 不编增量"
+
+
 async def _fetch_browser_accounts(accounts: list, settings: dict) -> dict:
     """浏览器平台逐账号抓。返回 {key: result}。bilibili 附带 API 粉丝兜底。
     任何单账号异常只记为该账号的失败, 绝不中断其他账号。"""
@@ -255,12 +277,14 @@ async def crawl(only=None, do_sync=True) -> int:
         log.info(f"— API 平台 {len(api_accts)} 个 —")
         for k, r in _fetch_api_accounts(api_accts).items():
             acct = next(a for a in api_accts if a["_key"] == k)
+            _apply_content_delta(data, today, k, r)
             hist.record(data, today, k, r, acct)
         hist.save(data)
     if brw_accts:
         log.info(f"— 浏览器平台 {len(brw_accts)} 个 —")
         for k, r in (await _fetch_browser_accounts(brw_accts, settings)).items():
             acct = next(a for a in brw_accts if a["_key"] == k)
+            _apply_content_delta(data, today, k, r)
             hist.record(data, today, k, r, acct)
         hist.save(data)
 

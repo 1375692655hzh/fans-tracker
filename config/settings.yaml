@@ -5,8 +5,8 @@ browser:
   headless: true
 schedule:
   enabled: true
-  hour: 9
-  minute: 0
+  hour: 8
+  minute: 30
 web:
   host: 127.0.0.1
   port: 8787

@@ -302,6 +302,23 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
         return "-"
 
     accounts = hist_day.get("accounts", {})
+    # 只写当前 accounts.yaml 里仍存在的账号: 改 URL 后旧 key 的当日残留记录
+    # 若不滤掉, 同一账号会在表格里出现两行(2026-09-16 用户反馈)
+    valid_keys = None
+    try:
+        import yaml as _yaml
+        from history import account_key as _account_key
+        acc_path = Path(__file__).resolve().parent / "config" / "accounts.yaml"
+        acc_cfg = _yaml.safe_load(acc_path.read_text(encoding="utf-8")) or {}
+        valid_keys = {_account_key(a) for a in (acc_cfg.get("accounts") or [])}
+    except Exception as e:
+        logger.warning(f"读取 accounts.yaml 失败(跳过旧key过滤): {e}")
+    if valid_keys is not None:
+        stale = [k for k in accounts if k not in valid_keys]
+        for k in stale:
+            accounts = {kk: v for kk, v in accounts.items() if kk != k}
+        if stale:
+            logger.info(f"已跳过 {len(stale)} 条旧 key 残留记录: {stale}")
     # 手动填写平台(公众号/视频号): 先读现有表, 用户已填的数据列重跑不冲掉
     from fetchers.browser_page import SPEC as _SPEC
     existing = {}

@@ -63,7 +63,7 @@ def day(data: dict, date: str) -> dict:
 def record(data: dict, date: str, key: str, result: dict, acct: dict) -> None:
     """写入一个账号的当日抓取结果(整条覆盖, 含错误便于排查)。"""
     d = day(data, date)
-    d["accounts"][key] = {
+    rec = {
         "platform": acct["platform"],
         "platform_label": acct.get("platform_label", ""),
         "owner": acct.get("owner", ""),
@@ -76,6 +76,13 @@ def record(data: dict, date: str, key: str, result: dict, acct: dict) -> None:
         "errors": result.get("errors") or {},
         "manual": result.get("manual", False),
     }
+    # 平台累计计数快照(x发帖数): 供次日算24h增量, 无则不存
+    if result.get("content_total") is not None:
+        rec["content_total"] = result["content_total"]
+    # 24h内原创帖明细(x): 仅供本地查看/排查, 不进表格
+    if result.get("content_detail"):
+        rec["content_detail"] = result["content_detail"]
+    d["accounts"][key] = rec
 
 
 def mark_synced(data: dict, date: str) -> None:
