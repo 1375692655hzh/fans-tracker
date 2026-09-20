@@ -84,9 +84,10 @@ SPEC = {
         # 主页头部 "帖子 · 169|关注 · 0|粉丝 · 418"; feed "· 09-18 18:58|标题"
         "labels": ["粉丝"], "prio_res": [r"粉丝\s*·\s*" + NUM, NUM + r"\s*粉丝"],
         "content": {"labels": []},
-        "views": {"labels": []},   # 列表页无阅读数(详情页才有, 不逐条点)
+        "views": {"labels": []},   # 列表页就有: 每条卡片底部"数字 评论"(数字=浏览量)
         "items": {
             "date_res": r"·\s*(\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})",
+            "views_res": NUM + r"\s*\n\s*评论", "window": 120,
         },
         "login_marks": ["login", "signin"], "needs_login": False,
     },
