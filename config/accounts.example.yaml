@@ -8,10 +8,12 @@
 #     laohu 老虎 | ths 同花顺 | weibo 微博
 #     zhihu 知乎 | bilibili B站 | xhs 小红书 | douyin 抖音 | kuaishou 快手
 #     x X(Twitter) | youtube YouTube
-#     weixin_gzh 公众号(预留) | weixin_sph 视频号(预留)
+#     weixin_gzh 公众号(手动填写型) | weixin_sph 视频号(手动填写型):
+#       无法程序抓取, 但每天会在腾讯文档生成该行(所有人/平台/名称),
+#       阅读量等数据由用户在表格里手动填; 重复同步不会冲掉已填数据
 #   owner     账号所有人(必填, 填到表格第一列)
-#   name      账号名称(可留空, 抓取时自动用平台昵称)
-#   url       账号主页链接(x/youtube 之外的平台必填)
+#   name      账号名称(可留空, 抓取时自动用平台昵称; 手动填写型必填)
+#   url       账号主页链接(x/youtube/公众号/视频号 之外的平台必填)
 #   handle    仅 x / youtube 需要: @后面的字符串(不带@)
 #
 # 需要登录态的平台先执行: python main.py login <platform>

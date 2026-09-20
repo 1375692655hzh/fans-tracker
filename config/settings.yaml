@@ -1,41 +1,29 @@
-# fans-tracker 全局配置
+# 由控制台自动生成; 各项含义见 README.md
 browser:
-  # auto: 先试 CDP 接管本机 Chrome(9222 调试口, 复用日常登录态),
-  #       不通则逐平台用 profiles/<平台> 独立登录态窗口
-  # cdp: 只走 CDP(失败报错) | own: 只走独立 profile
   mode: auto
   cdp_url: http://127.0.0.1:9222
-  channel: chromium        # chromium(自带) / chrome / msedge
-  headless: true           # 静默(无头)后台抓取不弹窗; 个别平台反爬严时改 false
-
-# 定时自动化(网页「设置」页可改, 保存即重注册 Windows 计划任务)
+  channel: chromium
+  headless: true
 schedule:
   enabled: true
   hour: 9
   minute: 0
-
-# Web 控制台(python main.py web)
 web:
   host: 127.0.0.1
   port: 8787
-  auto_open: false         # 改 true 则启动时自动打开浏览器标签
-
+  auto_open: false
 tdoc:
-  # 【腾讯文档】每日社媒数据表
   file_id: YOUR_SHEET_ID
-  # 表头驱动: 列名对应取值(账号所有人/所属平台/账号名称/阅读/播放量/
-  # 内容数/增粉/累计粉丝), 列序可调; 不认识的列名填 "-"
   header:
-    - 账号所有人
-    - 所属平台
-    - 账号名称
-    - 阅读/播放量
-    - 内容数
-    - 增粉
-    - 累计粉丝
-
+  - 账号所有人
+  - 所属平台
+  - 账号名称
+  - 阅读/播放量
+  - 内容数
+  - 增粉
+  - 累计粉丝
 crawl:
-  retry: 1                 # 单账号失败重试次数
-  page_wait_ms: 2500       # SPA 渲染轮询间隔
-  page_rounds: 8           # 轮询次数
+  retry: 1
+  page_wait_ms: 2500
+  page_rounds: 8
   nav_timeout_ms: 45000

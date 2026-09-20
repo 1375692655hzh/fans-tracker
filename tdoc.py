@@ -279,10 +279,6 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
         sheet_id = cli.add_sheet(file_id, date)
         logger.info(f"腾讯文档: 新建 sheet「{date}」({sheet_id})")
 
-    from metrics import growth_row
-    from history import load as load_hist
-    hist_all = load_hist()
-
     def _field(col, rec, key):
         """列名 → 单元格值; 不认识的列名填 "-", 未来调列自动适配。"""
         if col == "账号所有人":
@@ -302,10 +298,35 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
             return rec.get("followers")                 if rec.get("followers") is not None else "-"
         return "-"
 
+    accounts = hist_day.get("accounts", {})
+    # 手动填写平台(公众号/视频号): 先读现有表, 用户已填的数据列重跑不冲掉
+    from fetchers.browser_page import SPEC as _SPEC
+    existing = {}
+    if (any(rec.get("manual") or _SPEC.get(rec.get("platform", ""), {})
+                .get("manual") for rec in accounts.values())
+            and target):
+        try:
+            grid = cli.read_cells(file_id, sheet_id,
+                                  end_row=len(accounts) + 5,
+                                  end_col=len(header))
+            for r in grid[1:]:
+                if len(r) >= 3:
+                    existing[(str(r[0]), str(r[1]), str(r[2]))] = r
+        except Exception as e:
+            logger.warning(f"读取现有表格失败(手动行保留跳过): {e}")
+
     rows = [list(header)]
-    for key in sorted(hist_day.get("accounts", {})):
-        rec = hist_day["accounts"][key]
-        rows.append([_field(col, rec, key) for col in header])
+    for key in sorted(accounts):
+        rec = accounts[key]
+        row = [_field(col, rec, key) for col in header]
+        if rec.get("manual") or _SPEC.get(rec.get("platform", ""), {}).get("manual"):
+            old = existing.get((str(row[0]), str(row[1]), str(row[2])))
+            if old:
+                for i in range(3, len(row)):    # 身份三列外的数据列
+                    ov = str(old[i]).strip() if i < len(old) else ""
+                    if ov and ov != "-":
+                        row[i] = old[i]
+        rows.append(row)
     cli.write_csv(file_id, sheet_id, rows)
     logger.info(f"腾讯文档: 已写入 {len(rows) - 1} 个账号 → sheet「{date}」")
     return sheet_id

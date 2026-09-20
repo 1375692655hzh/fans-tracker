@@ -162,12 +162,26 @@ async def crawl(only=None, do_sync=True) -> int:
     api_accts = [a for a in accounts if a["platform"] in API_FETCHERS]
     brw_accts = [a for a in accounts
                  if a["platform"] in BROWSER_PLATFORMS]
+    manual_accts = [a for a in accounts
+                    if (SPEC.get(a["platform"]) or {}).get("manual")]
     skipped = [a for a in accounts
                if a["platform"] not in API_FETCHERS
-               and a["platform"] not in BROWSER_PLATFORMS]
+               and a["platform"] not in BROWSER_PLATFORMS
+               and a not in manual_accts]
     for a in skipped:
         log.warning(f"[{a['_key']}] 平台未支持/预留: "
                     f"{SPEC.get(a['platform'], {}).get('disabled', '未知平台')}")
+
+    if manual_accts:                  # 手动填写型: 不抓, 占位生成当日行
+        log.info(f"— 手动填写平台 {len(manual_accts)} 个(数据由用户在表格里填) —")
+        for a in manual_accts:
+            r = {"platform": a["platform"],
+                 "platform_label": a["platform_label"],
+                 "owner": a.get("owner"), "name": a.get("name"),
+                 "followers": None, "content": None, "views": None,
+                 "manual": True}
+            hist.record(data, today, a["_key"], r, a)
+        hist.save(data)
 
     if api_accts:
         log.info(f"— API 平台 {len(api_accts)} 个 —")

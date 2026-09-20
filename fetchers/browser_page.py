@@ -182,12 +182,13 @@ SPEC = {
         "views": {"labels": []},
         "login_marks": ["login"], "needs_login": True,
     },
-    # 微信封闭生态, 需后台登录, 本期跳过(接口预留)
-    "weixin_gzh": {"label": "公众号", "disabled": "需公众号后台权限, 未开通"},
-    "weixin_sph": {"label": "视频号", "disabled": "需视频号助手后台权限, 未开通"},
+    # 微信封闭生态, 无法程序抓取 —— 手动填写型: 表格每天生成该行, 数据用户自己填
+    "weixin_gzh": {"label": "公众号", "manual": True},
+    "weixin_sph": {"label": "视频号", "manual": True},
 }
 
-BROWSER_PLATFORMS = [k for k, v in SPEC.items() if not v.get("disabled")]
+BROWSER_PLATFORMS = [k for k, v in SPEC.items()
+                     if not v.get("disabled") and not v.get("manual")]
 
 
 # ---------- 数字解析(移植 followers.py) ----------

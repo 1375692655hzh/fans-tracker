@@ -53,3 +53,4 @@ label.inline { display: flex; gap: 6px; align-items: center; font-size: 14px; }
 .badge.ok { background: #dafbe1; color: var(--ok); }
 .badge.warn { background: #fff8c5; color: var(--warn); }
 code { background: var(--bg); padding: 1px 6px; border-radius: 4px; }
+.hint-orange { color: #d97706; font-weight: 600; }   /* App分享链接等关键提示 */

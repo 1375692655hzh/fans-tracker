@@ -40,7 +40,7 @@ async function load() {
   PLATFORMS = st.platforms;
   const sel = document.getElementById("a-platform");
   sel.innerHTML = PLATFORMS.map(p =>
-    `<option value="${p.id}">${p.label}${p.needs_login ? "(建议登录)" : ""}</option>`).join("");
+    `<option value="${p.id}">${p.label}${p.manual ? "(手动填写)" : p.needs_login ? "(建议登录)" : ""}</option>`).join("");
   sel.onchange = () => {
     const isApi = ["x", "youtube"].includes(sel.value);
     document.getElementById("a-url").disabled = isApi;
@@ -58,9 +58,14 @@ async function load() {
       xueqiu: "主页链接(xueqiu.com/u/数字)",
       weibo: "主页链接(weibo.com/u/数字)",
       zhihu: "主页链接(zhihu.com/people/…)",
+      weixin_gzh: "公众号无法程序抓取: 每天表格自动生成该行(所有人/平台/名称), 阅读量等数据由你在腾讯文档手动填写",
+      weixin_sph: "视频号无法程序抓取: 每天表格自动生成该行(所有人/平台/名称), 数据由你在腾讯文档手动填写",
     };
-    document.getElementById("url-hint").textContent =
-      hints[sel.value] || (isApi ? "X/YouTube 填右侧 @handle 即可" : "");
+    const el = document.getElementById("url-hint");
+    el.textContent = hints[sel.value]
+      || (isApi ? "X/YouTube 填右侧 @handle 即可" : "");
+    el.className = ["ths", "xhs", "douyin", "kuaishou"].includes(sel.value)
+      ? "hint-orange" : "muted";
   };
   const tb = document.getElementById("rows");
   tb.innerHTML = (acc.accounts || []).map(a => {
@@ -70,7 +75,7 @@ async function load() {
       <td>${a.owner || "-"}</td><td>${a.platform_label || a.platform}</td>
       <td>${a.name || "-"}</td>
       <td class="ellip">${ident ? `<a href="${a.handle ? (a.platform === 'x' ? 'https://x.com/' + a.handle : 'https://youtube.com/@' + a.handle) : a.url}" target="_blank">${ident}</a>` : "-"}</td>
-      <td>${p.needs_login ? "建议登录" : "-"}</td>
+      <td>${p.manual ? "手动填写" : p.needs_login ? "建议登录" : "-"}</td>
       <td class="acts">
         <button class="edit" data-p="${a.platform}" data-u="${a.url || ''}"
                 data-h="${a.handle || ''}" data-owner="${a.owner || ''}"

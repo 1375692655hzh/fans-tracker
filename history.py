@@ -74,6 +74,7 @@ def record(data: dict, date: str, key: str, result: dict, acct: dict) -> None:
         "content": result.get("content"),
         "views": result.get("views"),
         "errors": result.get("errors") or {},
+        "manual": result.get("manual", False),
     }
 
 

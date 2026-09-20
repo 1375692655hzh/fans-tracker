@@ -132,12 +132,16 @@ def _validate_account(d: dict):
         return f"未知平台 {plat}", plat, "", "", "", ""
     if SPEC.get(plat, {}).get("disabled"):
         return f"{plat} 本期未开通", plat, "", "", "", ""
+    manual = bool(SPEC.get(plat, {}).get("manual"))
     url = (d.get("url") or "").strip()
     handle = (d.get("handle") or "").strip().lstrip("@")
     if plat in API_FETCHERS and not handle:
         return "X/YouTube 必须填 handle(@用户名)", plat, "", "", "", ""
-    if plat not in API_FETCHERS and not url.startswith("http"):
+    if (not manual and plat not in API_FETCHERS
+            and not url.startswith("http")):
         return "必须填主页链接(http开头)", plat, "", "", "", ""
+    if manual and not (d.get("name") or "").strip():
+        return "手动填写平台请填账号名称(表格里用于识别该行)", plat, "", "", "", ""
     owner = (d.get("owner") or "").strip() or "未填"
     name = (d.get("name") or "").strip()
     return "", plat, owner, name, url, handle
@@ -326,7 +330,8 @@ def api_settings():
                          "minute": sched.get("minute", 0)},
             "task": tasks.query_schedule(),
             "platforms": [{"id": k, "label": v["label"],
-                           "needs_login": v.get("needs_login", False)}
+                           "needs_login": v.get("needs_login", False),
+                           "manual": bool(v.get("manual"))}
                           for k, v in SPEC.items()]
                           + [{"id": "x", "label": "X", "needs_login": False},
                              {"id": "youtube", "label": "YouTube",
