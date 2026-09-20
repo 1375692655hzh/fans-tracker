@@ -194,7 +194,7 @@ def _finalize_link(plat: str, url: str) -> tuple:
     return url, share_url, extra
 
 
-def _fmt_account_lines(plat, owner, name, url, handle) -> list:
+def _fmt_account_lines(plat, owner, name, url, handle, share_url="") -> list:
     lines = [f"  - platform: {plat}"]
     for k, v in (("owner", owner), ("name", name)):
         lines.append(f"    {k}: {v}" if v else f'    {k}: ""')
@@ -202,6 +202,8 @@ def _fmt_account_lines(plat, owner, name, url, handle) -> list:
         lines.append(f"    handle: {handle}")
     if url:
         lines.append(f"    url: {url}")
+    if share_url:
+        lines.append(f"    share_url: {share_url}")
     return lines
 
 
@@ -215,9 +217,7 @@ def add_account(f: Path, d: dict) -> dict:
             return {"ok": False, "msg": extra.strip(" ⚠")}
     else:
         share_url, extra = "", ""
-    lines = _fmt_account_lines(plat, owner, name, url, handle)
-    if share_url:
-        lines.append(f"    share_url: {share_url}")
+    lines = _fmt_account_lines(plat, owner, name, url, handle, share_url)
     if f.exists() and "accounts:" in f.read_text(encoding="utf-8"):
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("\n" + "\n".join(lines) + "\n")
