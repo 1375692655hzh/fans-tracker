@@ -79,6 +79,26 @@ SPEC = {
         "views": {"labels": []},
         "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False,
     },
+    "weibo": {
+        "label": "微博",
+        # 与新浪财经同路线(独立平台身份, 供单独运营微博号的账号使用)
+        "labels": ["粉丝"], "prio_res": [
+            r"全部粉丝\s*[（(]\s*" + NUM + r"\s*[）)]", NUM + r"\s*粉丝"],
+        "content": {"labels": [], "prio_res": [
+            r"全部微博\s*[（(]\s*" + NUM + r"\s*[）)]"]},
+        "views": {"labels": []},
+        "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False,
+    },
+    "zhihu": {
+        "label": "知乎",
+        # 主页 "关注了 1 | 关注者 58"; 内容栏 "回答3 | 文章169 | 专栏1"
+        # 匿名访问会被风控(unhuman), 必须登录态(已复用 auto-publisher)
+        "labels": ["关注者"], "prio_res": [
+            r"关注者\s*[：:]?\s*" + NUM, NUM + r"\s*关注者"],
+        "content": {"labels": ["文章"], "prio_res": [r"文章\s*(\d+)"]},
+        "views": {"labels": []},   # 总阅读量仅创作中心有, 公开页无
+        "login_marks": ["signin", "/login", "unhuman"], "needs_login": True,
+    },
     "bilibili": {
         "label": "B站",
         # 空间页 "关注数 686 | 粉丝数 1798.9万", 投稿 "999+"(平台封顶)
@@ -161,8 +181,8 @@ EXTRACT_JS = """(cfg) => {
             if (!t || t.length > 8) continue;
             if (!labels.some(l => t === l || t.startsWith(l) || t.endsWith(l)))
                 continue;
-            for (const scope of [el.parentElement, el.previousElementSibling,
-                                 el.nextElementSibling]) {
+            for (const scope of [el.previousElementSibling,
+                                 el.nextElementSibling, el.parentElement]) {
                 if (!scope) continue;
                 const m = numRe.exec(
                     (scope.innerText || '').replace(/\\u00a0/g, ' '));
@@ -193,6 +213,8 @@ EXTRACT_JS = """(cfg) => {
         content: pick(cfg.cLabels, cfg.cPrio),
         views: pick(cfg.vLabels, cfg.vPrio),
         title: (document.title || '').slice(0, 80),
+        h1: ((document.querySelector('h1') || {}).innerText || '')
+            .replace(/\\s+/g, ' ').slice(0, 40),
     };
 }"""
 
@@ -280,8 +302,9 @@ async def extract_account(page, account, spec, settings, logger):
             break
         if None not in (r["followers"], r["content"], r["views"]):
             break
-    # 昵称: 优先 <title> 前段(各平台标题多为 "昵称的主页/个人中心-平台名")
-    r["name"] = _clean_title_name(found_title) or r["name"]
+    # 昵称: <title> 前段 / 页面 h1, 谁可用用谁
+    r["name"] = (_clean_title_name(found_title)
+                 or _clean_title_name(out.get("h1") or "")) or r["name"]
     for m in ("followers", "content", "views"):
         if r[m] is None and m not in r["errors"]:
             r["errors"][m] = "页面未出现该指标(公开页无此数据)"

@@ -23,6 +23,8 @@ LOGIN_URLS = {
     "laohu": ("https://www.laohu8.com/", ["login", "signin"]),
     "ths": ("https://t.10jqka.com.cn/", ["login"]),
     "sina": ("https://weibo.com/", ["newlogin", "login.sina", "/login"]),
+    "weibo": ("https://weibo.com/", ["newlogin", "login.sina", "/login"]),
+    "zhihu": ("https://www.zhihu.com/", ["signin", "/login", "unhuman"]),
     "bilibili": ("https://www.bilibili.com/", ["passport"]),
     "xhs": ("https://www.xiaohongshu.com/", ["login"]),
     "douyin": ("https://www.douyin.com/", ["login"]),

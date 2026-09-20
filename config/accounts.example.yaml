@@ -5,8 +5,8 @@
 # 字段说明:
 #   platform 平台标识(必填), 可用值:
 #     futu 富途 | xueqiu 雪球 | changqiao 长桥 | eastmoney 东方财富
-#     laohu 老虎 | ths 同花顺 | sina 新浪财经(微博主页) | bilibili B站
-#     xhs 小红书 | douyin 抖音 | kuaishou 快手
+#     laohu 老虎 | ths 同花顺 | sina 新浪财经(微博主页) | weibo 微博
+#     zhihu 知乎 | bilibili B站 | xhs 小红书 | douyin 抖音 | kuaishou 快手
 #     x X(Twitter) | youtube YouTube
 #     weixin_gzh 公众号(预留) | weixin_sph 视频号(预留)
 #   owner     账号所有人(必填, 填到表格第一列)

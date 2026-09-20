@@ -22,7 +22,7 @@ SRC = Path(r"D:\AI\auto-publisher\autopub\followers_history.json")
 
 # auto-publisher 平台名 → 本项目平台名
 PLATFORM_MAP = {"futu": "futu", "xueqiu": "xueqiu", "changqiao": "changqiao",
-                "eastmoney": "eastmoney", "weibo": "sina"}
+                "eastmoney": "eastmoney", "weibo": "sina", "zhihu": "zhihu"}
 
 
 def main():
