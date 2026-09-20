@@ -69,19 +69,9 @@ SPEC = {
         "views": {"labels": ["阅读"]},
         "login_marks": ["login"], "needs_login": False,
     },
-    "sina": {
-        "label": "新浪财经",
-        # 微博主页 "9粉丝 | 10关注 | 24转评赞"; 内容数仅登录后"全部微博(N)"
-        "labels": ["粉丝"], "prio_res": [
-            r"全部粉丝\s*[（(]\s*" + NUM + r"\s*[）)]", NUM + r"\s*粉丝"],
-        "content": {"labels": [], "prio_res": [
-            r"全部微博\s*[（(]\s*" + NUM + r"\s*[）)]"]},
-        "views": {"labels": []},
-        "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False,
-    },
     "weibo": {
         "label": "微博",
-        # 与新浪财经同路线(独立平台身份, 供单独运营微博号的账号使用)
+        # 主页 "9粉丝 | 10关注 | 24转评赞"; 内容数仅登录后"全部微博(N)"
         "labels": ["粉丝"], "prio_res": [
             r"全部粉丝\s*[（(]\s*" + NUM + r"\s*[）)]", NUM + r"\s*粉丝"],
         "content": {"labels": [], "prio_res": [

@@ -22,7 +22,6 @@ LOGIN_URLS = {
     "eastmoney": ("https://www.eastmoney.com/", ["passport", "/login"]),
     "laohu": ("https://www.laohu8.com/", ["login", "signin"]),
     "ths": ("https://t.10jqka.com.cn/", ["login"]),
-    "sina": ("https://weibo.com/", ["newlogin", "login.sina", "/login"]),
     "weibo": ("https://weibo.com/", ["newlogin", "login.sina", "/login"]),
     "zhihu": ("https://www.zhihu.com/", ["signin", "/login", "unhuman"]),
     "bilibili": ("https://www.bilibili.com/", ["passport"]),

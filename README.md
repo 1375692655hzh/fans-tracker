@@ -42,7 +42,7 @@
 | 东方财富 | `eastmoney` | Playwright i 主页 | ✓ | - | - | 匿名可抓 |
 | 老虎 | `laohu` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
 | 同花顺 | `ths` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
-| 新浪财经 | `sina` | Playwright 微博主页 | ✓ | - | - | 匿名可抓(登录更全) |
+| 微博 | `weibo` | Playwright 主页 | ✓ | - | - | 匿名可抓(登录更全) |
 | 微博 | `weibo` | Playwright 主页 | ✓ | - | - | 匿名可抓 |
 | 知乎 | `zhihu` | Playwright 主页 | ✓ | ✓文章 | - | **需登录**(风控严) |
 | B站 | `bilibili` | relation/stat API + 空间页 | ✓(API精确) | ✓投稿(999+封顶) | - | 匿名可抓 |
