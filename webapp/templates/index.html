@@ -82,23 +82,7 @@ function renderAll() {
     "badge " + (r.synced ? "ok" : "warn");
   const vis = k => !VISIBLE || VISIBLE.has(k);
   renderPanel(r, vis);
-  const tb = document.getElementById("rows");
-  tb.innerHTML = (r.rows || []).filter(x => vis(x.key)).map(x => {
-    const bad = Object.keys(x.errors || {}).length &&
-      x.followers === null;
-    return `<tr>
-      <td>${x.owner}</td><td>${x.platform}</td><td>${x.name}</td>
-      <td>${fmt(x.views)}</td><td>${fmt(x.content)}</td>
-      <td>${fmt(x.daily)}</td>
-      <td><b>${fmt(x.followers)}</b></td>
-      <td>${bad ? `<span class="badge warn" title="${esc(JSON.stringify(x.errors))}">失败</span>`
-                : (Object.keys(x.errors||{}).length
-                   ? `<span class="badge" title="${esc(JSON.stringify(x.errors))}">部分</span>`
-                   : '<span class="badge ok">✓</span>')}</td>
-    </tr>`;
-  }).join("") || '<tr><td colspan="8" class="muted">还没有数据(或全被隐藏了), 点「立即抓取」或在上方勾选账号</td></tr>';
-  drawChart(r, vis);
-  drawGrowth(r, vis);
+  refreshData();
 }
 
 /* ---------- 账号显示面板: 分组彩色标签 ---------- */
@@ -140,7 +124,11 @@ document.getElementById("vis-panel").addEventListener("click", e => {
     if (!VISIBLE) VISIBLE = new Set((DATA.rows || []).map(x => x.key));
     VISIBLE.has(k) ? VISIBLE.delete(k) : VISIBLE.add(k);
     if (VISIBLE.size === (DATA.rows || []).length) VISIBLE = null;  // 全选=不过滤
-    persist(); renderAll();
+    persist();
+    // 轻量刷新: 只改本标签样式+汇总+图表表格, 不重建整个面板(避免点按卡顿)
+    chip.classList.toggle("off", !(!VISIBLE || VISIBLE.has(k)));
+    updateSummary();
+    refreshData();
     return;
   }
   const title = e.target.closest(".grp-title");
@@ -154,6 +142,30 @@ document.getElementById("vis-panel").addEventListener("click", e => {
     persist(); renderAll();
   }
 });
+function updateSummary() {
+  const rows = DATA.rows || [];
+  document.getElementById("vis-summary").textContent =
+    `显示 ${VISIBLE ? VISIBLE.size : rows.length}/${rows.length} 个账号 · ${GRP === "owner" ? "按人" : "按平台"}分组`;
+}
+function refreshData() {              // 图表+表格(不动面板)
+  const r = DATA, vis = k => !VISIBLE || VISIBLE.has(k);
+  const tb = document.getElementById("rows");
+  tb.innerHTML = (r.rows || []).filter(x => vis(x.key)).map(x => {
+    const bad = Object.keys(x.errors || {}).length && x.followers === null;
+    return `<tr>
+      <td>${x.owner}</td><td>${x.platform}</td><td>${x.name}</td>
+      <td>${fmt(x.views)}</td><td>${fmt(x.content)}</td>
+      <td>${fmt(x.daily)}</td>
+      <td><b>${fmt(x.followers)}</b></td>
+      <td>${bad ? `<span class="badge warn" title="${esc(JSON.stringify(x.errors))}">失败</span>`
+                : (Object.keys(x.errors||{}).length
+                   ? `<span class="badge" title="${esc(JSON.stringify(x.errors))}">部分</span>`
+                   : '<span class="badge ok">✓</span>')}</td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="8" class="muted">还没有数据(或全被隐藏了), 点「立即抓取」或在左侧勾选账号</td></tr>';
+  drawChart(r, vis);
+  drawGrowth(r, vis);
+}
 document.getElementById("grp-owner").onclick = () => { GRP = "owner"; persist(); renderPanel(DATA, k => !VISIBLE || VISIBLE.has(k)); };
 document.getElementById("grp-platform").onclick = () => { GRP = "platform"; persist(); renderPanel(DATA, k => !VISIBLE || VISIBLE.has(k)); };
 document.getElementById("vis-all").onclick = () => { VISIBLE = null; persist(); renderAll(); };
@@ -174,7 +186,8 @@ function drawChart(r, vis) {
   if (window._chart) window._chart.destroy();
   window._chart = new Chart(el, {type: "line",
     data: {labels: r.dates, datasets: sets},
-    options: {responsive: true, interaction: {mode: "index", intersect: false},
+    options: {responsive: true, animation: false,
+      interaction: {mode: "index", intersect: false},
       plugins: {legend: {display: sets.length <= 8, position: "bottom"}}}});
 }
 
@@ -196,7 +209,7 @@ function drawGrowth(r, vis) {
   if (window._gchart) window._gchart.destroy();
   window._gchart = new Chart(el, {type: "bar",
     data: {labels: g.dates, datasets: sets},
-    options: {responsive: true,
+    options: {responsive: true, animation: false,
       scales: {x: {stacked: true}, y: {stacked: true, beginAtZero: true}},
       interaction: {mode: "index", intersect: false},
       plugins: {

@@ -16,7 +16,7 @@ nav a { color: var(--muted); text-decoration: none; padding: 4px 2px; }
 nav a.on { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--brand); }
 nav a:hover { color: var(--ink); }
 main { max-width: 1100px; margin: 18px auto; padding: 0 16px; }
-main.wide { max-width: 1560px; }               /* 仪表盘: 用足宽屏, 左侧留给账号栏 */
+main.wide { max-width: none; }                /* 仪表盘: 铺满整屏, 左账号栏+右主区顶到边 */
 footer { text-align: center; color: var(--muted); font-size: 12px; padding: 22px; }
 footer a { color: var(--muted); }
 .card {
@@ -67,12 +67,12 @@ button.mini.on { background: #24292f; }
 .chip:hover { border-color: var(--brand); }
 .chip.off { opacity: .38; text-decoration: line-through; background: var(--bg); }
 
-/* 仪表盘双栏: 左账号栏(吸附), 右图表; 窄屏自动上下堆叠 */
+/* 仪表盘双栏: 左账号栏(吸附, 宽), 右主区铺满剩余; 窄屏自动上下堆叠 */
 .dash-layout { display: flex; gap: 16px; align-items: flex-start; }
-.dash-side { flex: 0 0 285px; width: 285px; position: sticky; top: 14px; }
+.dash-side { flex: 0 0 340px; width: 340px; position: sticky; top: 14px; }
 .dash-side .card { max-height: calc(100vh - 60px); overflow-y: auto; }
 .dash-main { flex: 1; min-width: 0; }
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
   .dash-layout { flex-direction: column; }
   .dash-side { position: static; width: auto; flex: none; }
   .dash-side .card { max-height: none; overflow: visible; }
