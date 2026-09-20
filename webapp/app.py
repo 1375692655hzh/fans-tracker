@@ -79,7 +79,29 @@ def api_data():
                 "label": f"{rec.get('owner') or ''}·"
                          f"{rec.get('platform_label') or rec.get('platform')}",
                 "points": pts}
+
+    # 增粉趋势: 每账号每日 增粉 = 当日粉丝 - 上一次有值日的粉丝
+    g_series, g_totals = {}, {dt: 0 for dt in dates}
+    for key, s in series.items():
+        prev, pts = None, []
+        for dt, v in zip(dates, s["points"]):
+            delta = (v - prev) if (isinstance(v, int)
+                                   and isinstance(prev, int)) else None
+            pts.append(delta)
+            if delta is not None:
+                g_totals[dt] = g_totals.get(dt, 0) + delta
+            if isinstance(v, int):
+                prev = v
+        g_series[key] = {"label": s["label"], "points": pts}
+    # 只保留贡献过增粉的账号(图例不爆炸), 按总贡献降序取前10
+    ranked = sorted(g_series.items(),
+                    key=lambda kv: sum(p for p in kv[1]["points"]
+                                       if isinstance(p, int)), reverse=True)
+    g_series = dict(ranked[:10])
+
     return jsonify({"dates": dates, "series": series, "rows": rows,
+                    "growth": {"dates": dates, "series": g_series,
+                               "totals": g_totals},
                     "latest_date": latest["date"] if latest else "",
                     "today": today, "synced": hist.is_synced(data, today)})
 

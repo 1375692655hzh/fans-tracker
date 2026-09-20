@@ -253,15 +253,18 @@ def _csv_cell(v):
 
 
 def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
-    """把一天的账号数据写进当日 sheet。返回 sheet_id。
+    """把一天的账号数据写进当日 sheet(表头驱动, 列序随配置)。返回 sheet_id。
 
     hist_day: history.day() 的 {"date","accounts":{key:rec}}
     """
+    from metrics import growth_row
+    from history import load as load_hist
+    hist_all = load_hist()
+
     tcfg = settings.get("tdoc") or {}
     file_id = tcfg.get("file_id") or "YOUR_SHEET_ID"
     header = tcfg.get("header") or ["账号所有人", "所属平台", "账号名称",
-                                    "阅读/播放量", "内容数", "增粉", "环比上周",
-                                    "累计粉丝", "上周增粉数据"]
+                                    "阅读/播放量", "内容数", "增粉", "累计粉丝"]
     date = date or hist_day.get("date") or datetime.now().strftime("%Y-%m-%d")
 
     cli = SheetClient()
@@ -280,20 +283,29 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
     from history import load as load_hist
     hist_all = load_hist()
 
-    rows = [header]
+    def _field(col, rec, key):
+        """列名 → 单元格值; 不认识的列名填 "-", 未来调列自动适配。"""
+        if col == "账号所有人":
+            return rec.get("owner") or "-"
+        if col == "所属平台":
+            return rec.get("platform_label") or rec.get("platform") or "-"
+        if col == "账号名称":
+            return rec.get("name") or "-"
+        if col == "阅读/播放量":
+            return rec.get("views") if rec.get("views") is not None else "-"
+        if col == "内容数":
+            return rec.get("content") if rec.get("content") is not None                 else "-"
+        if col == "增粉":
+            return growth_row(hist_all, key, date,
+                              rec.get("followers"))["daily"]
+        if col == "累计粉丝":
+            return rec.get("followers")                 if rec.get("followers") is not None else "-"
+        return "-"
+
+    rows = [list(header)]
     for key in sorted(hist_day.get("accounts", {})):
         rec = hist_day["accounts"][key]
-        g = growth_row(hist_all, key, date, rec.get("followers"))
-        rows.append([
-            rec.get("owner") or "-",
-            rec.get("platform_label") or rec.get("platform") or "-",
-            rec.get("name") or "-",
-            rec.get("views") if rec.get("views") is not None else "-",
-            rec.get("content") if rec.get("content") is not None else "-",
-            g["daily"], g["wow"],
-            rec.get("followers") if rec.get("followers") is not None else "-",
-            g["last_week"],
-        ])
+        rows.append([_field(col, rec, key) for col in header])
     cli.write_csv(file_id, sheet_id, rows)
     logger.info(f"腾讯文档: 已写入 {len(rows) - 1} 个账号 → sheet「{date}」")
     return sheet_id
