@@ -222,7 +222,7 @@ def daily(force=False) -> int:
     if not force and hist.is_synced(data, today):
         log.info(f"{today} 已完成并同步过, 跳过(重跑: python main.py daily --force)")
         return 0
-    return crawl()
+    return asyncio.run(crawl())
 
 
 # ---------- 登录 / 探测 / 状态 ----------
