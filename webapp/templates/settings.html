@@ -41,6 +41,10 @@
   <p class="muted">抓取需要"登录着看"的平台(富途/快手等): 用<b>任一手机号</b>(如闲置号)
   在弹出的窗口里登录一次即可 —— 这份登录态只用来浏览被跟踪账号的主页,
   跟踪哪些账号在「账号管理」页配, 两者互不影响。登录态存 profiles/&lt;平台&gt;, 长期有效。</p>
+  <div class="row" style="margin-bottom:8px">
+    <button id="btn-probe-all">一键检测全部</button>
+    <span id="probe-all-state" class="muted"></span>
+  </div>
   <table>
     <thead><tr><th>平台</th><th>跟踪账号</th><th>登录档案</th>
       <th>最近抓取</th><th>实时检测</th><th></th></tr></thead>
@@ -140,10 +144,25 @@ function lgBadge(e) {
   return `<span style="color:#999">○ 未登录</span>`;
 }
 
-let LG_RUNNING = [];
+let LG_RUNNING = [], LG_BATCH = {running: false}, BATCH_TIMER = null;
 async function loadLogin() {
   const d = await (await fetch("/api/login/entries")).json();
   const runKeys = new Set(LG_RUNNING.map(r => r.platform));
+  LG_BATCH = d.batch || LG_BATCH;
+  const btn = document.getElementById("btn-probe-all");
+  const st = document.getElementById("probe-all-state");
+  if (LG_BATCH.running) {
+    btn.disabled = true;
+    btn.textContent = "检测中…";
+    st.textContent = `${LG_BATCH.done}/${LG_BATCH.total}`
+      + (LG_BATCH.current ? ` (当前: ${LG_BATCH.current})` : "")
+      + " —— 只测有登录档案的平台, 每个约4秒";
+  } else {
+    btn.disabled = false;
+    btn.textContent = "一键检测全部";
+    st.textContent = LG_BATCH.total && LG_BATCH.done >= LG_BATCH.total
+      ? `上次检测完成: ${LG_BATCH.done}/${LG_BATCH.total}` : "";
+  }
   document.getElementById("login-rows").innerHTML =
     (d.entries || []).map(e => {
       const busy = runKeys.has(e.platform);
@@ -157,11 +176,22 @@ async function loadLogin() {
           <button class="gologin" data-p="${e.platform}"
                   ${busy ? "disabled" : ""}>${busy ? "登录中…" : "去登录"}</button>
           <button class="lgprobe" data-p="${e.platform}"
-                  ${busy ? "disabled" : ""}>检测</button>
+                  ${busy || LG_BATCH.running ? "disabled" : ""}>检测</button>
         </td>
       </tr>`;
     }).join("");
 }
+
+document.getElementById("btn-probe-all").onclick = async () => {
+  const r = await (await fetch("/api/login/probe_all", {method: "POST"})).json();
+  if (!r.ok) { alert(r.msg); return; }
+  loadLogin();
+  if (BATCH_TIMER) clearInterval(BATCH_TIMER);
+  BATCH_TIMER = setInterval(async () => {
+    await loadLogin();
+    if (!LG_BATCH.running) clearInterval(BATCH_TIMER);
+  }, 2500);
+};
 
 async function pollLoginRunning() {
   const d = await (await fetch("/api/login/running")).json();

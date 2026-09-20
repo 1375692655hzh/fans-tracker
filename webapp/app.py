@@ -434,7 +434,44 @@ import loginctl                          # noqa: E402
 
 LOGIN_PROCS = {}                          # platform -> {"proc", "started"}
 PROBE_CACHE = {}                          # platform -> probe 结果
+BATCH = {"running": False, "total": 0, "done": 0, "current": "", "started": ""}
 _probe_lock = threading.Lock()
+
+
+def _batch_probe():
+    """后台逐平台探测(只测有档案的; 没档案=必然未登录, 不浪费一次开浏览器)。"""
+    plats = [p for p in LOGIN_URLS if (ROOT / "profiles" / p).exists()]
+    BATCH.update(running=True, total=len(plats), done=0, current="",
+                 started=datetime.now().strftime("%H:%M:%S"))
+    try:
+        for p in plats:
+            BATCH["current"] = PLATFORM_LABELS.get(p, p)
+            try:
+                PROBE_CACHE[p] = loginctl.probe(p)
+            except Exception as e:
+                PROBE_CACHE[p] = {"platform": p, "logged_in": None,
+                                  "detail": f"检测异常: {str(e)[:80]}",
+                                  "checked_at": datetime.now().strftime("%H:%M:%S")}
+            BATCH["done"] += 1
+    finally:
+        BATCH.update(running=False, current="")
+
+
+def _run_batch():
+    with _probe_lock:
+        _batch_probe()
+
+
+@app.route("/api/login/probe_all", methods=["POST"])
+def api_login_probe_all():
+    """一键检测全部: 后台逐平台探测, 前端轮询 entries 看 live 进度。"""
+    if BATCH["running"]:
+        return jsonify({"ok": False, "msg": "批量检测进行中"})
+    if not _probe_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "msg": "正在单个检测, 请稍候再一键检测"})
+    _probe_lock.release()
+    threading.Thread(target=_run_batch, daemon=True).start()
+    return jsonify({"ok": True, "msg": "已开始批量检测"})
 
 
 @app.route("/api/login/entries")
@@ -468,7 +505,9 @@ def api_login_entries():
         })
     entries.sort(key=lambda e: (not e["needs_login"],))
     return jsonify({"entries": entries,
-                    "last_date": days[-1]["date"] if days else ""})
+                    "last_date": days[-1]["date"] if days else "",
+                    "batch": {"running": BATCH["running"], "total": BATCH["total"],
+                              "done": BATCH["done"], "current": BATCH["current"]}})
 
 
 @app.route("/api/login/probe", methods=["POST"])
