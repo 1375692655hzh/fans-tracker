@@ -54,3 +54,14 @@ label.inline { display: flex; gap: 6px; align-items: center; font-size: 14px; }
 .badge.warn { background: #fff8c5; color: var(--warn); }
 code { background: var(--bg); padding: 1px 6px; border-radius: 4px; }
 .hint-orange { color: #d97706; font-weight: 600; }   /* App分享链接等关键提示 */
+button.mini { padding: 3px 10px; font-size: 12px; }
+button.mini.on { background: #24292f; }
+.grp-title { display:inline-block; margin: 8px 8px 2px 0; font-weight: 600;
+             font-size: 13px; color: var(--ink); cursor: pointer;
+             border-bottom: 1px dashed var(--muted); }
+.grp-title:hover { color: var(--brand); }
+.chip { display:inline-block; margin: 3px 4px 3px 0; padding: 3px 12px;
+        border-radius: 14px; border: 1px solid var(--line); font-size: 12.5px;
+        cursor: pointer; user-select: none; background: #fff; }
+.chip:hover { border-color: var(--brand); }
+.chip.off { opacity: .38; text-decoration: line-through; background: var(--bg); }

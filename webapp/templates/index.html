@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% block title %}仪表盘{% endblock %}
 {% block body %}
+<div class="card">
+  <h3>账号显示 <span id="vis-summary" class="muted"></span>
+    <span class="right" style="display:flex;gap:6px">
+      <button class="mini" id="grp-owner">按人分组</button>
+      <button class="mini" id="grp-platform">按平台分组</button>
+      <button class="mini" id="vis-all">全部显示</button>
+    </span>
+  </h3>
+  <div id="vis-panel" class="muted">加载中…</div>
+  <p class="muted" style="margin:6px 0 0">点账号名开关显示(图表/表格同步过滤); 点分组标题=只看该组(再点恢复全部)。</p>
+</div>
+
 <div class="row">
   <div class="card grow">
     <h3>粉丝趋势 <span id="latest-date" class="muted"></span></h3>
@@ -35,17 +47,41 @@
 <script>
 const fmt = v => (v === null || v === undefined) ? "-" : v;
 let pollTimer = null;
+let DATA = null;                        // /api/data 原始结果
+let VISIBLE = null;                     // Set(账号key), null=全部显示
+let GRP = localStorage.getItem("ft_grp") || "owner";   // owner|platform 分组方式
+
+function persist() {
+  localStorage.setItem("ft_vis",
+    VISIBLE ? JSON.stringify([...VISIBLE]) : "");
+  localStorage.setItem("ft_grp", GRP);
+}
 
 async function loadData() {
   const r = await (await fetch("/api/data")).json();
+  DATA = r;
+  const saved = localStorage.getItem("ft_vis");
+  if (saved !== null) {
+    const keys = new Set(JSON.parse(saved));
+    // 只保留当前还存在的账号
+    VISIBLE = new Set((r.rows || []).filter(x => keys.has(x.key)).map(x => x.key));
+  }
+  renderAll();
+}
+
+function renderAll() {
+  const r = DATA;
+  if (!r) return;
   document.getElementById("latest-date").textContent =
     r.latest_date ? `(${r.latest_date})` : "(暂无数据)";
   document.getElementById("synced-badge").textContent =
     r.synced ? "今日已同步到腾讯文档 ✓" : "今日未同步";
   document.getElementById("synced-badge").className =
     "badge " + (r.synced ? "ok" : "warn");
+  const vis = k => !VISIBLE || VISIBLE.has(k);
+  renderPanel(r, vis);
   const tb = document.getElementById("rows");
-  tb.innerHTML = (r.rows || []).map(x => {
+  tb.innerHTML = (r.rows || []).filter(x => vis(x.key)).map(x => {
     const bad = Object.keys(x.errors || {}).length &&
       x.followers === null;
     return `<tr>
@@ -58,20 +94,78 @@ async function loadData() {
                    ? `<span class="badge" title="${esc(JSON.stringify(x.errors))}">部分</span>`
                    : '<span class="badge ok">✓</span>')}</td>
     </tr>`;
-  }).join("") || '<tr><td colspan="8" class="muted">还没有数据, 点「立即抓取」或等每天定时任务</td></tr>';
-  drawChart(r);
-  drawGrowth(r);
+  }).join("") || '<tr><td colspan="8" class="muted">还没有数据(或全被隐藏了), 点「立即抓取」或在上方勾选账号</td></tr>';
+  drawChart(r, vis);
+  drawGrowth(r, vis);
 }
+
+/* ---------- 账号显示面板: 分组彩色标签 ---------- */
+function renderPanel(r, vis) {
+  const rows = r.rows || [];
+  const panel = document.getElementById("vis-panel");
+  document.getElementById("vis-summary").textContent =
+    `显示 ${VISIBLE ? VISIBLE.size : rows.length}/${rows.length} 个账号 · ${GRP === "owner" ? "按人" : "按平台"}分组`;
+  document.getElementById("grp-owner").classList.toggle("on", GRP === "owner");
+  document.getElementById("grp-platform").classList.toggle("on", GRP === "platform");
+  if (!rows.length) { panel.innerHTML = "还没有账号"; return; }
+  // 分组: key=组名, chips 按组内顺序
+  const groups = new Map();
+  for (const x of rows) {
+    const gname = GRP === "owner" ? x.owner : x.platform;
+    if (!groups.has(gname)) groups.set(gname, []);
+    groups.get(gname).push(x);
+  }
+  const colorOf = x => {
+    const i = rows.indexOf(x);
+    return palette[i % palette.length];
+  };
+  panel.innerHTML = [...groups.entries()].map(([g, items]) => `
+    <div>
+      <span class="grp-title" data-group="${esc(g)}" title="只看这组(再点恢复全部)">${esc(g)} · ${items.length}</span><br>
+      ${items.map(x => `
+        <span class="chip ${vis(x.key) ? "" : "off"}" data-k="${esc(x.key)}"
+              title="${GRP === "owner" ? x.platform : x.owner} · ${esc(x.name)}"
+              style="border-color:${colorOf(x)};${vis(x.key) ? `background:${colorOf(x)}22;` : ""}">
+          ${GRP === "owner" ? x.platform : x.owner}·${esc(x.name)}
+        </span>`).join("")}
+    </div>`).join("");
+}
+
+document.getElementById("vis-panel").addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (chip) {
+    const k = chip.dataset.k;
+    if (!VISIBLE) VISIBLE = new Set((DATA.rows || []).map(x => x.key));
+    VISIBLE.has(k) ? VISIBLE.delete(k) : VISIBLE.add(k);
+    if (VISIBLE.size === (DATA.rows || []).length) VISIBLE = null;  // 全选=不过滤
+    persist(); renderAll();
+    return;
+  }
+  const title = e.target.closest(".grp-title");
+  if (title && DATA) {
+    const g = title.dataset.group;
+    const inGroup = new Set((DATA.rows || [])
+      .filter(x => (GRP === "owner" ? x.owner : x.platform) === g).map(x => x.key));
+    // 已经恰好只看这组 → 恢复全部; 否则只看这组
+    VISIBLE = (VISIBLE && VISIBLE.size === inGroup.size &&
+               [...inGroup].every(k => VISIBLE.has(k))) ? null : inGroup;
+    persist(); renderAll();
+  }
+});
+document.getElementById("grp-owner").onclick = () => { GRP = "owner"; persist(); renderPanel(DATA, k => !VISIBLE || VISIBLE.has(k)); };
+document.getElementById("grp-platform").onclick = () => { GRP = "platform"; persist(); renderPanel(DATA, k => !VISIBLE || VISIBLE.has(k)); };
+document.getElementById("vis-all").onclick = () => { VISIBLE = null; persist(); renderAll(); };
 
 function esc(s){return s.replace(/"/g,"&quot;").replace(/</g,"&lt;")}
 
 const palette = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
                  "#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac",
                  "#86bcb6","#d37295"];
-function drawChart(r) {
+function drawChart(r, vis) {
   const el = document.getElementById("trend");
   if (!el || !r.dates.length) return;
-  const sets = Object.entries(r.series || {}).slice(0, 12).map(([k, s], i) => ({
+  const sets = Object.entries(r.series || {})
+    .filter(([k]) => vis(k)).slice(0, 12).map(([k, s], i) => ({
     label: s.label, data: s.points, borderColor: palette[i % palette.length],
     spanGaps: true, tension: .25, pointRadius: 2,
   }));
@@ -82,16 +176,21 @@ function drawChart(r) {
       plugins: {legend: {display: sets.length <= 8, position: "bottom"}}}});
 }
 
-// 增粉趋势: 每日合计柱状图, 悬停显示各账号贡献与占比
-function drawGrowth(r) {
+// 增粉趋势: 每日合计柱状图, 悬停显示各账号贡献与占比(按当前可见账号重算合计)
+function drawGrowth(r, vis) {
   const el = document.getElementById("growth");
   const g = r.growth;
   if (!el || !g || !g.dates.length) return;
-  const sets = Object.entries(g.series).map(([k, s], i) => ({
+  const entries = Object.entries(g.series).filter(([k]) => vis(k));
+  const sets = entries.map(([k, s], i) => ({
     label: s.label, data: s.points,
     backgroundColor: palette[i % palette.length], stack: "growth",
     borderWidth: 1, borderColor: "#fff",
   }));
+  const totals = {};                        // 可见账号的每日合计
+  g.dates.forEach((d, di) => {
+    totals[d] = entries.reduce((sum, [, s]) => sum + (s.points[di] || 0), 0);
+  });
   if (window._gchart) window._gchart.destroy();
   window._gchart = new Chart(el, {type: "bar",
     data: {labels: g.dates, datasets: sets},
@@ -103,10 +202,10 @@ function drawGrowth(r) {
         tooltip: {filter: it => it.parsed.y !== null && it.parsed.y !== 0,
           callbacks: {
           title: it => it[0].label + " 增粉合计 " +
-            (g.totals[it[0].label] ?? 0),
+            (totals[it[0].label] ?? 0),
           label: it => {
             if (it.parsed.y === null || it.parsed.y === 0) return null;
-            const total = g.totals[it.label] || 1;
+            const total = totals[it.label] || 1;
             const pct = (it.parsed.y / total * 100).toFixed(0);
             return ` ${it.dataset.label}: ${it.parsed.y} (${pct}%)`;
           }}}}}});   // label→callbacks→tooltip→plugins→options→Chart配置→Chart调用
