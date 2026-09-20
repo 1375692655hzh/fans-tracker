@@ -83,7 +83,7 @@ def api_data():
                     "today": today, "synced": hist.is_synced(data, today)})
 
 
-@app.route("/api/accounts", methods=["GET", "POST", "DELETE"])
+@app.route("/api/accounts", methods=["GET", "POST", "PUT", "DELETE"])
 def api_accounts():
     f = ROOT / "config" / "accounts.yaml"
     if request.method == "GET":
@@ -91,40 +91,51 @@ def api_accounts():
     if request.method == "POST":
         d = request.json or {}
         return jsonify(add_account(f, d))
+    if request.method == "PUT":          # 编辑: old 定位块, new 写新值
+        d = request.json or {}
+        old = d.get("old") or {}
+        new = d.get("new") or {}
+        return jsonify(update_account(f, old, new))
     # DELETE
     d = request.json or {}
     return jsonify(delete_account(f, d.get("platform", ""),
                                   d.get("url", ""), d.get("handle", "")))
 
 
-def add_account(f: Path, d: dict) -> dict:
+def _validate_account(d: dict):
+    """返回 (err, plat, owner, name, url, handle)。"""
     plat = (d.get("platform") or "").strip()
     if plat not in PLATFORM_LABELS:
-        return {"ok": False, "msg": f"未知平台 {plat}"}
+        return f"未知平台 {plat}", plat, "", "", "", ""
     if SPEC.get(plat, {}).get("disabled"):
-        return {"ok": False, "msg": f"{plat} 本期未开通"}
+        return f"{plat} 本期未开通", plat, "", "", "", ""
     url = (d.get("url") or "").strip()
     handle = (d.get("handle") or "").strip().lstrip("@")
     if plat in API_FETCHERS and not handle:
-        return {"ok": False, "msg": "X/YouTube 必须填 handle(@用户名)"}
+        return "X/YouTube 必须填 handle(@用户名)", plat, "", "", "", ""
     if plat not in API_FETCHERS and not url.startswith("http"):
-        return {"ok": False, "msg": "必须填主页链接(http开头)"}
-    acct = {"platform": plat, "owner": (d.get("owner") or "").strip() or "未填",
-            "name": (d.get("name") or "").strip()}
-    if handle:
-        acct["handle"] = handle
-    if url:
-        acct["url"] = url
+        return "必须填主页链接(http开头)", plat, "", "", "", ""
+    owner = (d.get("owner") or "").strip() or "未填"
+    name = (d.get("name") or "").strip()
+    return "", plat, owner, name, url, handle
+
+
+def _fmt_account_lines(plat, owner, name, url, handle) -> list:
     lines = [f"  - platform: {plat}"]
-    for k in ("owner", "name"):
-        if acct.get(k):
-            lines.append(f"    {k}: {acct[k]}")
-        else:
-            lines.append(f'    {k}: ""')
+    for k, v in (("owner", owner), ("name", name)):
+        lines.append(f"    {k}: {v}" if v else f'    {k}: ""')
     if handle:
         lines.append(f"    handle: {handle}")
     if url:
         lines.append(f"    url: {url}")
+    return lines
+
+
+def add_account(f: Path, d: dict) -> dict:
+    err, plat, owner, name, url, handle = _validate_account(d)
+    if err:
+        return {"ok": False, "msg": err}
+    lines = _fmt_account_lines(plat, owner, name, url, handle)
     if f.exists() and "accounts:" in f.read_text(encoding="utf-8"):
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("\n" + "\n".join(lines) + "\n")
@@ -132,6 +143,43 @@ def add_account(f: Path, d: dict) -> dict:
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("accounts:\n" + "\n".join(lines) + "\n")
     return {"ok": True, "msg": "已添加(立即生效)"}
+
+
+def update_account(f: Path, old: dict, new: dict) -> dict:
+    """按 old(platform+url/handle) 定位账号块, 原位替换为新值(可改任意字段)。"""
+    err, plat, owner, name, url, handle = _validate_account(new)
+    if err:
+        return {"ok": False, "msg": err}
+    old_plat = (old.get("platform") or "").strip()
+    old_ident = ((old.get("url") or old.get("handle") or "")
+                 .strip().lstrip("@"))
+    if not old_plat or not old_ident:
+        return {"ok": False, "msg": "缺少要定位的原账号信息"}
+    lines = f.read_text(encoding="utf-8").splitlines()
+    out, i, done = [], 0, False
+    while i < len(lines):
+        ln = lines[i]
+        if ln.strip() == f"- platform: {old_plat}" and not done:
+            block = [ln]
+            j = i + 1
+            while j < len(lines):
+                nxt = lines[j]
+                if nxt.strip().startswith("- platform:") or not nxt.startswith(
+                        (" ", "\t")):
+                    break
+                block.append(nxt)
+                j += 1
+            if old_ident in "\n".join(block):
+                out.extend(_fmt_account_lines(plat, owner, name, url, handle))
+                done = True
+                i = j
+                continue
+        out.append(ln)
+        i += 1
+    if not done:
+        return {"ok": False, "msg": "没找到原账号(可能已被改过, 刷新后重试)"}
+    f.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return {"ok": True, "msg": "已修改(立即生效)"}
 
 
 def delete_account(f: Path, platform: str, url: str, handle: str) -> dict:

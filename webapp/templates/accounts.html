@@ -2,7 +2,7 @@
 {% block title %}账号管理{% endblock %}
 {% block body %}
 <div class="card">
-  <h3>添加账号 <span class="muted">同事发来主页链接 → 填这里即可, 立即生效</span></h3>
+  <h3 id="form-title">添加账号 <span class="muted">同事发来主页链接 → 填这里即可, 立即生效</span></h3>
   <form id="f-add" class="grid">
     <label>所属平台
       <select id="a-platform" required></select></label>
@@ -10,7 +10,8 @@
     <label>账号名称 <input id="a-name" placeholder="留空自动抓昵称"></label>
     <label>主页链接 <input id="a-url" placeholder="https://… (X/YouTube 不用填)"></label>
     <label>@handle <input id="a-handle" placeholder="仅 X/YouTube: 如 owenwin888"></label>
-    <button type="submit">添加</button>
+    <button type="submit" id="btn-submit">添加</button>
+    <button type="button" id="btn-cancel" style="display:none">取消编辑</button>
   </form>
   <div id="add-msg" class="muted"></div>
 </div>
@@ -61,30 +62,70 @@ async function load() {
       <td>${a.name || "-"}</td>
       <td class="ellip">${ident ? `<a href="${a.handle ? (a.platform === 'x' ? 'https://x.com/' + a.handle : 'https://youtube.com/@' + a.handle) : a.url}" target="_blank">${ident}</a>` : "-"}</td>
       <td>${p.needs_login ? "建议登录" : "-"}</td>
-      <td><button class="del" data-p="${a.platform}" data-u="${a.url || ''}" data-h="${a.handle || ''}">删除</button></td>
+      <td class="acts">
+        <button class="edit" data-p="${a.platform}" data-u="${a.url || ''}"
+                data-h="${a.handle || ''}" data-owner="${a.owner || ''}"
+                data-name="${a.name || ''}">编辑</button>
+        <button class="del" data-p="${a.platform}" data-u="${a.url || ''}" data-h="${a.handle || ''}">删除</button>
+      </td>
     </tr>`;
   }).join("");
 }
+
+let editing = null;   // null=添加模式, 否则={platform,url,handle}定位原账号
 
 document.getElementById("f-add").onsubmit = async e => {
   e.preventDefault();
   const body = {
     platform: v("a-platform"), owner: v("a-owner"), name: v("a-name"),
     url: v("a-url"), handle: v("a-handle")};
-  const r = await (await fetch("/api/accounts", {method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+  let r;
+  if (editing) {
+    r = await (await fetch("/api/accounts", {method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({old: editing, new: body})})).json();
+  } else {
+    r = await (await fetch("/api/accounts", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+  }
   document.getElementById("add-msg").textContent = r.msg;
-  if (r.ok) { e.target.reset(); load(); }
+  if (r.ok) { exitEdit(); load(); }
 };
 const v = id => document.getElementById(id).value.trim();
 
+function exitEdit() {
+  editing = null;
+  document.getElementById("f-add").reset();
+  document.getElementById("form-title").firstChild.textContent = "添加账号 ";
+  document.getElementById("btn-submit").textContent = "添加";
+  document.getElementById("btn-cancel").style.display = "none";
+}
+document.getElementById("btn-cancel").onclick = exitEdit;
+
 document.getElementById("rows").addEventListener("click", async e => {
-  if (!e.target.classList.contains("del")) return;
+  const t = e.target;
+  if (t.classList.contains("edit")) {          // 进入编辑模式: 表单回填
+    editing = {platform: t.dataset.p, url: t.dataset.u, handle: t.dataset.h};
+    document.getElementById("a-platform").value = t.dataset.p;
+    document.getElementById("a-owner").value = t.dataset.owner;
+    document.getElementById("a-name").value = t.dataset.name;
+    document.getElementById("a-url").value = t.dataset.u;
+    document.getElementById("a-handle").value = t.dataset.h;
+    document.getElementById("a-platform").onchange();
+    document.getElementById("form-title").firstChild.textContent = "编辑账号 ";
+    document.getElementById("btn-submit").textContent = "保存修改";
+    document.getElementById("btn-cancel").style.display = "";
+    document.getElementById("add-msg").textContent = "正在编辑 "
+      + (t.dataset.u || "@" + t.dataset.h);
+    window.scrollTo({top: 0, behavior: "smooth"});
+    return;
+  }
+  if (!t.classList.contains("del")) return;
   if (!confirm("确认删除该账号?")) return;
   const r = await (await fetch("/api/accounts", {method: "DELETE",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({platform: e.target.dataset.p,
-      url: e.target.dataset.u, handle: e.target.dataset.h})})).json();
+    body: JSON.stringify({platform: t.dataset.p,
+      url: t.dataset.u, handle: t.dataset.h})})).json();
   if (!r.ok) alert(r.msg);
   load();
 });
