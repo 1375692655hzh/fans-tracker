@@ -31,6 +31,8 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 th { color: var(--muted); font-weight: 600; font-size: 13px; }
 td.ellip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.acts { white-space: nowrap; }        /* 操作按钮不换行, 保持并排 */
+td.acts button { padding: 4px 12px; font-size: 13px; }
 button {
   background: var(--brand); color: #fff; border: 0; border-radius: 6px;
   padding: 8px 16px; font-size: 14px; cursor: pointer;
