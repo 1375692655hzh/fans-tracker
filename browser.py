@@ -5,6 +5,7 @@ CDP 优先: 本机 Chrome 开了调试口(9222)就接管, 复用日常登录态
 回退: 逐平台 profiles/<平台> 独立登录态窗口(python main.py login <平台> 预先扫码)。
 """
 
+import hashlib
 import urllib.request
 from pathlib import Path
 
@@ -15,6 +16,14 @@ PROFILES = ROOT / "profiles"
 
 ANTI_DETECT_ARGS = ["--disable-blink-features=AutomationControlled"]
 HIDE_WEBDRIVER = "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+
+
+def profile_name(platform: str, ident: str = "") -> str:
+    """登录态目录名: 平台级共用 profiles/<平台>;
+    多账号平台(xhs/douyin 创作者后台)每账号独立 profiles/<平台>_<hash8>。"""
+    if not ident:
+        return platform
+    return f"{platform}_{hashlib.md5(ident.encode()).hexdigest()[:8]}"
 
 
 def cdp_alive(cdp_url: str) -> bool:
@@ -74,11 +83,15 @@ class BrowserSession:
                           "(需登录的平台先 python main.py login <平台>)")
         return self
 
-    async def acquire_page(self, platform: str):
-        """返回 (page, ctx_owned_by_caller)。own 模式换平台时会关旧开新。"""
+    async def acquire_page(self, platform: str, ident: str = ""):
+        """返回 (page, ctx_owned_by_caller)。own 模式换 profile 时关旧开新。
+
+        ident: 多账号平台(xhs/douyin)每账号独立登录态目录; 其余传空共用平台级。
+        """
+        prof = profile_name(platform, ident)
         if self.mode == "cdp":
             return self._page, False
-        if self._ctx_platform != platform:
+        if self._ctx_platform != prof:
             await self._close_ctx()
             headless = bool((self.settings.get("browser") or {})
                             .get("headless", False))
@@ -94,9 +107,9 @@ class BrowserSession:
                 kwargs["channel"] = ch
             PROFILES.mkdir(exist_ok=True)
             self._ctx = await self._pw.chromium.launch_persistent_context(
-                str(PROFILES / platform), **kwargs)
+                str(PROFILES / prof), **kwargs)
             await self._ctx.add_init_script(HIDE_WEBDRIVER)
-            self._ctx_platform = platform
+            self._ctx_platform = prof
             page = (self._ctx.pages[0]
                     if self._ctx.pages
                     else await self._ctx.new_page())

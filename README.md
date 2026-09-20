@@ -4,6 +4,38 @@
 自动计算 **增粉 / 环比上周 / 上周增粉**，写入腾讯文档
 【每日社媒数据表】中以当日日期命名的 sheet（沿用表内 9 列模板）。
 
+## 多账号登录（小红书 / 抖音）
+
+小红书的**每条笔记阅读量**只在创作者后台
+（creator.xiaohongshu.com/new/note-manager）且必须**该账号本人登录**——
+这决定了"监控 N 个小红书号"就需要 N 份各自登录态，任何爬虫框架都绕不开。
+本项目用**每账号独立浏览器配置目录**解决"一个浏览器只能登一个号"：
+
+```bash
+# 每个小红书号扫一次码(各自独立 profiles/xhs_<hash8>, 互不挤掉):
+python main.py login xhs https://www.xiaohongshu.com/user/profile/账号ID
+python main.py login xhs https://www.xiaohongshu.com/user/profile/另一个ID
+# 抖音同理(公开主页数据只需任意一个抖音号登录):
+python main.py login douyin
+```
+
+登录后每日自动抓：公开主页粉丝 + 创作者后台昨日笔记数/阅读量。
+> 选型说明: MediaCrawler 等开源项目走"公开数据批量采集"路线，适合
+> 搜索/竞品笔记导出；但创作者后台阅读量必须逐账号登录，本项目的
+> 多 profile 方案已原生覆盖且与定时/写表链路一体，无需引入新依赖。
+
+## 各平台补充说明
+
+- **同花顺**: 填手机 App 分享出来的个人主页链接即可(自动识别跳转);
+  该平台无公开浏览量, 只有日期与粉丝
+- **B站**: 匿名可抓粉丝(API 精确); 昨日投稿数+每条播放需
+  `python main.py login bilibili` 扫码一次后自动生效(投稿列表页)
+- **快手**: 匿名访问是空壳, `python main.py login kuaishou` 任一账号
+  登录后即可看任意公开主页
+- **长桥**: 外部页(longportapp.com / longbridge.com)动态列表不稳定,
+  内容数抓不到时如实填 `-`; 浏览量平台本就不提供
+- **老虎**: 匿名全可见(粉丝/帖子数/每日日期); 列表无阅读量
+
 ## 环境要求
 
 - Windows 10/11（计划任务/桌面快捷方式为 Windows 专用）

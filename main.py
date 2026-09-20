@@ -90,7 +90,10 @@ async def _fetch_browser_accounts(accounts: list, settings: dict) -> dict:
             spec = SPEC[p]
             key = acct["_key"]
             log.info(f"[{key}] 打开 {acct.get('url')}")
-            page, _ = await sess.acquire_page(p)
+            # 多账号平台(xhs/douyin)每账号独立登录态目录
+            ident = (key.split(":", 1)[1]
+                     if spec.get("login_per_account") else "")
+            page, _ = await sess.acquire_page(p, ident)
             result = await extract_account(page, acct, spec, settings, log)
             for _ in range(retry):        # 核心指标失败重试
                 if not _retryable(result):
@@ -278,13 +281,17 @@ def status() -> None:
         print("  → 执行 python main.py tdoc-auth 扫码授权一次即可")
 
 
-def login(platform: str) -> int:
-    """扫码登录: profiles/<platform> 持久化保存, 一次长期有效。"""
+def login(platform: str, ident: str = "") -> int:
+    """扫码登录: profiles/<平台> 持久化保存, 一次长期有效。
+
+    多账号平台(xhs/douyin)传账号标识(主页链接), 每账号独立登录态:
+        python main.py login xhs https://www.xiaohongshu.com/user/profile/xxx
+    """
     if platform not in BROWSER_PLATFORMS:
         log.error(f"未知平台 {platform}, 可选: {', '.join(BROWSER_PLATFORMS)}")
         return 1
     import login as login_mod
-    return login_mod.interactive_login(platform)
+    return login_mod.interactive_login(platform, ident)
 
 
 def web() -> int:
@@ -418,7 +425,8 @@ def main():
         sys.exit(sync())
     if args.cmd == "login":
         plat = args.extra[0] if args.extra else ""
-        sys.exit(login(plat))
+        ident = args.extra[1] if len(args.extra) > 1 else ""
+        sys.exit(login(plat, ident))
     if args.cmd == "probe":
         url = args.extra[0] if args.extra else ""
         if not url.startswith("http"):

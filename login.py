@@ -31,11 +31,11 @@ LOGIN_URLS = {
 }
 
 
-async def _login_flow(platform: str) -> bool:
+async def _login_flow(platform: str, prof: str) -> bool:
     home, marks = LOGIN_URLS[platform]
     async with async_playwright() as pw:
         ctx = await pw.chromium.launch_persistent_context(
-            str(PROFILES / platform),
+            str(PROFILES / prof),
             headless=False,
             viewport={"width": 1280, "height": 860},
             locale="zh-CN",
@@ -71,13 +71,17 @@ async def _login_flow(platform: str) -> bool:
         return ok
 
 
-def interactive_login(platform: str) -> int:
+def interactive_login(platform: str, ident: str = "") -> int:
     if platform not in LOGIN_URLS:
         print(f"平台 {platform} 不在登录列表: {', '.join(LOGIN_URLS)}")
         return 1
+    from browser import profile_name
+    prof = profile_name(platform, ident)
+    if ident:
+        print(f"账号级登录态: profiles/{prof} (该账号独立, 与其他账号互不影响)")
     PROFILES.mkdir(exist_ok=True)
-    ok = asyncio.run(_login_flow(platform))
-    print(("✅ 登录态已保存到 profiles/" + platform) if ok
+    ok = asyncio.run(_login_flow(platform, prof))
+    print(("✅ 登录态已保存到 profiles/" + prof) if ok
           else "⚠️ 未确认登录成功, 可重跑或直接手测: python main.py probe <主页URL>")
     return 0 if ok else 1
 

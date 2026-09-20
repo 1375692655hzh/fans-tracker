@@ -81,16 +81,25 @@ SPEC = {
     },
     "laohu": {
         "label": "老虎",
-        "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
+        # 主页头部 "帖子 · 169|关注 · 0|粉丝 · 418"; feed "· 09-18 18:58|标题"
+        "labels": ["粉丝"], "prio_res": [r"粉丝\s*·\s*" + NUM, NUM + r"\s*粉丝"],
         "content": {"labels": []},
-        "views": {"labels": []},
+        "views": {"labels": []},   # 列表页无阅读数(详情页才有, 不逐条点)
+        "items": {
+            "date_res": r"·\s*(\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})",
+        },
         "login_marks": ["login", "signin"], "needs_login": False,
     },
     "ths": {
         "label": "同花顺",
+        # 手机分享链接会自动跳 user_page; 头部 "21粉丝6关注0勋章|动态16条"
+        # feed "Owen打个新|08-27 18:29|标题" (平台无公开浏览量)
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
         "content": {"labels": []},
         "views": {"labels": []},
+        "items": {
+            "date_res": r"(\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})",
+        },
         "login_marks": ["login"], "needs_login": False,
     },
     "weibo": {
@@ -119,33 +128,52 @@ SPEC = {
     },
     "bilibili": {
         "label": "B站",
-        # 空间页 "关注数 686 | 粉丝数 1798.9万"; 投稿列表卡不带日期→昨日口径暂缺
+        # 主页/投稿页头部 "关注数 686|粉丝数 1798.9万|投稿 161|视频 122"
+        # 投稿列表(需登录态): 每条带日期(9-19/昨天)和播放数; 匿名列表不加载→"-"
         "labels": ["粉丝"], "prio_res": [r"粉丝数?\s*[量：:]*\s*" + NUM],
         "content": {"labels": []},
         "views": {"labels": []},
+        "items": {
+            "date_res": r"(昨天|前天|今天|\d{1,2}-\d{1,2})\s*\d{1,2}:\d{2}",
+            "views_res": NUM + r"\s*播放", "window": 120,
+        },
+        "items_url_suffix": "/upload/video",
         "login_marks": ["passport"], "needs_login": False,
         "api_hook": "bilibili",   # 粉丝走 relation/stat 公开接口(见 bilibili_api)
     },
     "xhs": {
         "label": "小红书",
+        # 公开主页 "粉丝 N|笔记 N"(无阅读); 每条阅读量只在创作者后台
+        # note-manager(需该账号本人登录)。多账号监控: 每账号独立登录态目录
+        # profiles/xhs_<hash8>, 扫码: python main.py login xhs <主页链接>
         "labels": ["粉丝"], "prio_res": [r"粉丝\s*[（(:：]?\s*" + NUM],
-        "content": {"labels": []},   # 主页卡片无日期无阅读
+        "content": {"labels": []},
         "views": {"labels": []},
+        "items": {
+            "date_res": r"(昨天|前天|今天|\d{4}-\d{1,2}-\d{1,2})",
+            "views_res": r"阅读[量]?\s*[：:]?\s*" + NUM, "window": 120,
+        },
+        "items_url": "https://creator.xiaohongshu.com/new/note-manager",
         "login_marks": ["login"], "needs_login": True,
+        "login_per_account": True,
     },
     "douyin": {
         "label": "抖音",
-        "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": []},   # 作品网格不带日期(需进详情)
-        "views": {"labels": []},
-        "login_marks": ["login"], "needs_login": True,
-    },
-    "kuaishou": {
-        "label": "快手",
+        # 公开主页匿名多被登录墙挡; 有任一抖音登录态即可稳定看任意公开主页
+        # (作品网格带播放数, 日期需进详情; 多账号同 xhs 方案独立登录态)
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
         "content": {"labels": []},
         "views": {"labels": []},
-        "login_marks": ["login"], "needs_login": False,
+        "login_marks": ["login"], "needs_login": True,
+        "login_per_account": True,
+    },
+    "kuaishou": {
+        "label": "快手",
+        # 匿名访问主页为空壳(63字节); 需任一快手登录态即可看别人主页
+        "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
+        "content": {"labels": []},
+        "views": {"labels": []},
+        "login_marks": ["login"], "needs_login": True,
     },
     # 微信封闭生态, 需后台登录, 本期跳过(接口预留)
     "weixin_gzh": {"label": "公众号", "disabled": "需公众号后台权限, 未开通"},
@@ -293,7 +321,7 @@ async def extract_account(page, account, spec, settings, logger):
         r["errors"] = {"followers": f"打开主页失败: {str(e)[:100]}"}
         return r
     found_title = ""
-    found_body = ""
+    last_out = {}
     for _ in range(rounds):
         await page.wait_for_timeout(wait)
         if _is_login_page(page.url, spec.get("login_marks", [])):
@@ -305,8 +333,8 @@ async def extract_account(page, account, spec, settings, logger):
         except Exception:
             out = {}
         out = out or {}
+        last_out = out or last_out
         found_title = out.get("title") or found_title
-        found_body = out.get("body") or found_body
         if spec.get("items") and _ == 1:   # 滚动触发 feed 懒加载
             try:
                 await page.evaluate(
@@ -319,14 +347,46 @@ async def extract_account(page, account, spec, settings, logger):
             r["followers"], raw = _first_int(out.get("followers"))
             if r["followers"] is not None:
                 logger.info(f"[{key}] 粉丝 {r['followers']} (原文 {raw!r})")
-        # 「昨日内容」口径: 拿到正文且有 items 配置即解析一次
-        if spec.get("items") and r["content"] is None and found_body:
+        if r["views"] is None and not spec.get("items"):
+            r["views"], raw = _first_int(out.get("views"))
+            if r["views"] is not None:
+                logger.info(f"[{key}] 阅读播放 {r['views']} (原文 {raw!r})")
+        # 粉丝拿到且过半轮即收(「昨日内容」统一在循环后解析)
+        if r["followers"] is not None and _ > rounds // 2:
+            break
+    # 昵称: <title> 前段 / 页面 h1, 谁可用用谁
+    r["name"] = (_clean_title_name(found_title)
+                 or _clean_title_name(last_out.get("h1") or "")) or r["name"]
+
+    # 「昨日内容」: 内容列表可能在单独页面(如 B站投稿页/小红书后台)
+    if spec.get("items"):
+        target = spec.get("items_url") or ""
+        if not target and spec.get("items_url_suffix"):
+            target = url.rstrip("/") + spec["items_url_suffix"]
+        if target and target != url:
+            try:
+                await page.goto(target, wait_until="domcontentloaded",
+                                timeout=int((settings.get("crawl") or {})
+                                            .get("nav_timeout_ms", 45000)))
+                for _ in range(4):
+                    await page.wait_for_timeout(wait)
+                    try:
+                        out = await page.evaluate(EXTRACT_JS, cfg)
+                        last_out = out or last_out
+                        tb = last_out.get("body") or ""
+                        if tb and len(tb) > 800:
+                            break
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.info(f"[{key}] 内容列表页打开失败: {str(e)[:80]}")
+        if r["content"] is None and last_out.get("body"):
             from datetime import datetime as _dt
-            yi = parse_yesterday_items(found_body, spec["items"],
+            yi = parse_yesterday_items(last_out["body"], spec["items"],
                                        _dt.now(), logger)
             if yi["dated"] == 0:      # 没解析到任何日期 ≠ 昨日没发
                 r.setdefault("errors", {})["content"] = \
-                    "页面未解析到内容日期(可能未登录/懒加载)"
+                    "内容列表未解析到日期(可能需登录态, 见 README)"
             else:
                 r["content"] = yi["count"]
                 if yi["views"] is not None:
@@ -336,22 +396,6 @@ async def extract_account(page, account, spec, settings, logger):
                 elif yi["count"]:
                     logger.info(f"[{key}] 昨日内容 {yi['count']} 条"
                                 "(平台不公开浏览)")
-        if r["views"] is None and not spec.get("items"):
-            r["views"], raw = _first_int(out.get("views"))
-            if r["views"] is not None:
-                logger.info(f"[{key}] 阅读播放 {r['views']} (原文 {raw!r})")
-        # 粉丝是核心指标: 拿到粉丝且其余指标已尽力就提前收
-        done_enough = (r["followers"] is not None
-                       and (spec.get("items") or r["content"] is not None)
-                       and (r["views"] is not None or spec.get("items")
-                            or not (spec.get("views") or {}).get("prio_res")))
-        if done_enough and _ > rounds // 2:
-            break
-        if None not in (r["followers"], r["content"], r["views"]):
-            break
-    # 昵称: <title> 前段 / 页面 h1, 谁可用用谁
-    r["name"] = (_clean_title_name(found_title)
-                 or _clean_title_name(out.get("h1") or "")) or r["name"]
     for m in ("followers", "content", "views"):
         if r[m] is None and m not in r["errors"]:
             r["errors"][m] = "页面未出现该指标(公开页无此数据)"
