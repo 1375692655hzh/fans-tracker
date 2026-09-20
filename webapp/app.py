@@ -439,8 +439,11 @@ _probe_lock = threading.Lock()
 
 
 def _batch_probe():
-    """后台逐平台探测(只测有档案的; 没档案=必然未登录, 不浪费一次开浏览器)。"""
-    plats = [p for p in LOGIN_URLS if (ROOT / "profiles" / p).exists()]
+    """后台逐平台探测(只测有档案的; 没档案=必然未登录, 不浪费一次开浏览器)。
+    登录窗口正开着的平台跳过(同档案目录会被锁, 测了也白测)。"""
+    alive = {k for k, v in LOGIN_PROCS.items() if v["proc"].poll() is None}
+    plats = [p for p in LOGIN_URLS
+             if (ROOT / "profiles" / p).exists() and p not in alive]
     BATCH.update(running=True, total=len(plats), done=0, current="",
                  started=datetime.now().strftime("%H:%M:%S"))
     try:
@@ -550,10 +553,9 @@ def api_login_start():
     LOGIN_PROCS[plat] = {"proc": proc,
                          "started": datetime.now().strftime("%H:%M:%S")}
     return jsonify({"ok": True,
-                    "msg": "已在本机打开登录窗口: 用任意手机号(如闲置号)"
-                           "登录即可 —— 这份登录态只是用来浏览被跟踪账号的"
-                           "主页, 与账号管理无关。成功后自动保存并关闭"
-                           "(最长等10分钟)"})
+                    "msg": "已打开登录窗口: 不限时、不会自动关闭 —— 慢慢登录"
+                           "(用任意手机号即可); 完成后自己关掉窗口,"
+                           " 登录态自动保存并生效"})
 
 
 @app.route("/api/login/running")

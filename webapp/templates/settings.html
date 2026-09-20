@@ -50,8 +50,10 @@
       <th>最近抓取</th><th>实时检测</th><th></th></tr></thead>
     <tbody id="login-rows"><tr><td colspan="6" class="muted">加载中…</td></tr></tbody>
   </table>
-  <p class="muted">「检测」用无头浏览器快速验证登录态(绿=已登录 / 红=已失效 /
-  黄=无法判断, 如快手对无头渲染限制)。X/YouTube 走官方 API 无需登录, 不在此列。</p>
+  <p class="muted">「去登录」弹出的窗口<b>不限时、绝不自动关闭</b>: 用任意手机号
+  慢慢登录, 完成后自己关掉窗口即可, 登录态自动保存。打开本页会自动检测一轮,
+  绿●=已登录, 红●=未登录/失效, 黄●=无法判断(如快手限制无头渲染)。
+  X/YouTube 走官方 API 无需登录, 不在此列。</p>
 </div>
 
 <div class="card">
@@ -134,14 +136,14 @@ function lgBadge(e) {
     if (p.logged_in === true)
       return `<span style="color:#2e7d32">● 已登录</span> <span class="muted">${p.checked_at}</span>`;
     if (p.logged_in === false)
-      return `<span style="color:#c62828">● 已失效</span> <span class="muted">${p.detail || ""}</span>`;
+      return `<span style="color:#c62828">● 未登录/已失效</span> <span class="muted">${p.detail || ""}</span>`;
     return `<span style="color:#f9a825">● 无法判断</span> <span class="muted">${p.detail || ""}</span>`;
   }
   if (e.crawl_login_error)
     return `<span style="color:#c62828">● 抓取报登录失效</span> <span class="muted">${e.crawl_login_error}</span>`;
-  if (e.profile_exists)
-    return `<span style="color:#666">○ 有档案(未验证)</span>`;
-  return `<span style="color:#999">○ 未登录</span>`;
+  if (!e.profile_exists)
+    return `<span style="color:#c62828">● 未登录</span> <span class="muted">点右侧「去登录」</span>`;
+  return `<span style="color:#666">○ 有档案(检测中…)</span>`;
 }
 
 let LG_RUNNING = [], LG_BATCH = {running: false}, BATCH_TIMER = null;
@@ -181,32 +183,54 @@ async function loadLogin() {
         </td>
       </tr>`;
     }).join("");
+  // 进页面自动跑一轮检测(每页一次), 状态自动变绿/红
+  if (!AUTO_PROBED && !LG_BATCH.running
+      && (d.entries || []).some(e => e.profile_exists && !e.probe)) {
+    AUTO_PROBED = true;
+    document.getElementById("btn-probe-all").click();
+  } else if (LG_BATCH.running) {
+    ensureBatchTimer();
+  }
 }
 
 document.getElementById("btn-probe-all").onclick = async () => {
   const r = await (await fetch("/api/login/probe_all", {method: "POST"})).json();
   if (!r.ok) { alert(r.msg); return; }
   loadLogin();
-  if (BATCH_TIMER) clearInterval(BATCH_TIMER);
+  ensureBatchTimer();
+};
+
+function ensureBatchTimer() {
+  if (BATCH_TIMER) return;
   BATCH_TIMER = setInterval(async () => {
     await loadLogin();
-    if (!LG_BATCH.running) clearInterval(BATCH_TIMER);
+    if (!LG_BATCH.running) { clearInterval(BATCH_TIMER); BATCH_TIMER = null; }
   }, 2500);
-};
+}
 
 async function pollLoginRunning() {
   const d = await (await fetch("/api/login/running")).json();
-  const was = LG_RUNNING.length;
+  const before = new Set(LG_RUNNING.map(r => r.platform));
   LG_RUNNING = d.running || [];
-  if (was && !LG_RUNNING.length) loadLogin();   // 登录窗口刚关闭 → 刷新
+  const ended = [...before].filter(p => !LG_RUNNING.some(r => r.platform === p));
+  if (ended.length) {            // 登录窗口刚关闭 → 只复检这几个平台再刷新
+    for (const p of ended) {
+      await fetch("/api/login/probe", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({platform: p})});
+    }
+    loadLogin();
+  }
 }
 setInterval(pollLoginRunning, 3000);
+
+let AUTO_PROBED = false;         // 进页面自动跑一轮检测(每页一次)
 
 document.getElementById("login-rows").addEventListener("click", async e => {
   const t = e.target, p = t.dataset.p;
   if (t.classList.contains("gologin")) {
-    if (!confirm(`即将在本机弹出「${p}」登录窗口。\n用任意手机号(如闲置号)登录即可,`
-      + ` 这份登录态只用于浏览被跟踪账号的主页。\n继续?`)) return;
+    if (!confirm(`即将弹出「${p}」登录窗口。\n不限时、不会自动关闭 —— 用任意手机号`
+      + `慢慢登录; 完成后自己关掉窗口, 登录态自动保存。\n继续?`)) return;
     const r = await (await fetch("/api/login/start", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({platform: p})})).json();
