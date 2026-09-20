@@ -427,99 +427,97 @@ def api_crawl_status():
     return jsonify({"running": running, "tail": tail})
 
 
-# ---------- 登录状态 / 去登录 ----------
+# ---------- 平台登录态(设置页) ----------
 
 from login import LOGIN_URLS            # noqa: E402
-from browser import profile_name        # noqa: E402
 import loginctl                          # noqa: E402
 
-LOGIN_PROCS = {}                          # key -> {"proc", "platform", "ident"}
-PROBE_CACHE = {}                          # key -> probe 结果(10分钟有效)
+LOGIN_PROCS = {}                          # platform -> {"proc", "started"}
+PROBE_CACHE = {}                          # platform -> probe 结果
 _probe_lock = threading.Lock()
-
-
-def _login_ident(a: dict) -> str:
-    """多账号平台(xhs/dy)按账号区分登录档案 —— 与抓取侧同口径:
-    取 account_key 冒号后的部分(不带 http(s)://), 否则哈希对不上档案目录。"""
-    if (SPEC.get(a["platform"]) or {}).get("login_per_account"):
-        return a["_key"].split(":", 1)[1]
-    return ""
 
 
 @app.route("/api/login/entries")
 def api_login_entries():
-    """登录状态面板: 每个已配置账号(可登录平台)一行。"""
+    """设置页「平台登录」面板: 一行=一个可登录平台, 平台级一份登录档案
+    profiles/<平台>(闲置号登录后用于浏览被跟踪账号的主页, 与账号管理无关)。"""
     days = hist.load().get("days") or []
     last = days[-1]["accounts"] if days else {}
-    entries = []
+    acc_by_plat = {}
     for a in load_accounts():
-        plat = a["platform"]
-        if plat not in LOGIN_URLS:
-            continue                        # X/YouTube 纯API, 无需登录
-        ident = _login_ident(a)
-        prof = profile_name(plat, ident)
-        rec = last.get(a["_key"]) or {}
+        acc_by_plat.setdefault(a["platform"], []).append(a)
+    # 最近一次抓取中各平台的登录相关报错(聚合到平台)
+    crawl_err = {}
+    for key, rec in last.items():
+        plat = key.split(":", 1)[0]
         errs = " ".join((rec.get("errors") or {}).values())
-        lp = PROBE_CACHE.get(prof) or {}
+        if "登录" in errs and plat not in crawl_err:
+            crawl_err[plat] = errs[:80]
+    entries = []
+    for plat in LOGIN_URLS:
+        # 排序: 建议登录的在前, 其余按 LOGIN_URLS 原序
         entries.append({
-            "platform": plat, "label": a["platform_label"],
-            "ident": ident, "owner": a.get("owner") or "-",
-            "name": a.get("name") or "-", "url": a.get("url") or "",
-            "profile": prof,
-            "profile_exists": (ROOT / "profiles" / prof).exists(),
-            "crawl_login_error": "登录" in errs, "crawl_error": errs[:60],
-            "probe": lp or None,
+            "platform": plat,
+            "label": PLATFORM_LABELS.get(plat, plat),
+            "needs_login": bool((SPEC.get(plat) or {}).get("needs_login")),
+            "n_accounts": len(acc_by_plat.get(plat, [])),
+            "profile": plat,
+            "profile_exists": (ROOT / "profiles" / plat).exists(),
+            "crawl_login_error": crawl_err.get(plat) or "",
+            "probe": PROBE_CACHE.get(plat) or None,
         })
-    return jsonify({"entries": entries})
+    entries.sort(key=lambda e: (not e["needs_login"],))
+    return jsonify({"entries": entries,
+                    "last_date": days[-1]["date"] if days else ""})
 
 
 @app.route("/api/login/probe", methods=["POST"])
 def api_login_probe():
     d = request.json or {}
-    plat, ident = (d.get("platform") or "").strip(), (d.get("ident") or "").strip()
-    url = (d.get("url") or "").strip()
+    plat = (d.get("platform") or "").strip()
     if plat not in LOGIN_URLS:
         return jsonify({"ok": False, "msg": f"平台 {plat} 不支持登录检测"})
     if not _probe_lock.acquire(blocking=False):
         return jsonify({"ok": False, "msg": "正在检测其他平台, 请稍候"})
     try:
-        r = loginctl.probe(plat, ident, url)
+        r = loginctl.probe(plat)
     finally:
         _probe_lock.release()
-    PROBE_CACHE[r["profile"]] = r
+    PROBE_CACHE[plat] = r
     return jsonify({"ok": True, "result": r})
 
 
 @app.route("/api/login/start", methods=["POST"])
 def api_login_start():
-    """打开本机浏览器窗口完成扫码/账密登录, 登录态自动落盘长期有效。"""
+    """打开本机浏览器窗口, 用任意手机号(如闲置号)登录该平台;
+    登录态存 profiles/<平台>, 之后抓取用它浏览被跟踪账号的主页。"""
     d = request.json or {}
-    plat, ident = (d.get("platform") or "").strip(), (d.get("ident") or "").strip()
+    plat = (d.get("platform") or "").strip()
     if plat not in LOGIN_URLS:
         return jsonify({"ok": False, "msg": f"平台 {plat} 不支持网页登录"})
-    key = f"{plat}|{ident}"
     alive = [k for k, v in LOGIN_PROCS.items() if v["proc"].poll() is None]
-    if key in alive:
-        return jsonify({"ok": False, "msg": "该平台登录窗口已打开, 请到弹出的浏览器里完成登录"})
+    if plat in alive:
+        return jsonify({"ok": False,
+                        "msg": "该平台登录窗口已打开, 请到弹出的浏览器里完成登录"})
     ROOT.joinpath("logs").mkdir(exist_ok=True)
     logf = open(ROOT / "logs" / f"login_{plat}.log", "a", encoding="utf-8")
     logf.write(f"\n===== web 触发登录 {datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
     logf.flush()
-    cmd = [sys.executable, "main.py", "login", plat] + ([ident] if ident else [])
+    cmd = [sys.executable, "main.py", "login", plat]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     proc = subprocess.Popen(cmd, cwd=str(ROOT), stdout=logf, stderr=logf,
                             creationflags=flags)
-    LOGIN_PROCS[key] = {"proc": proc, "platform": plat, "ident": ident,
-                        "started": datetime.now().strftime("%H:%M:%S")}
+    LOGIN_PROCS[plat] = {"proc": proc,
+                         "started": datetime.now().strftime("%H:%M:%S")}
     return jsonify({"ok": True,
-                    "msg": "已在本机打开登录窗口: 请在弹出的浏览器里完成登录"
-                           "(扫码/账密), 检测到成功后会自动保存并关闭窗口,"
-                           "最长等待10分钟"})
+                    "msg": "已在本机打开登录窗口: 用任意手机号(如闲置号)"
+                           "登录即可 —— 这份登录态只是用来浏览被跟踪账号的"
+                           "主页, 与账号管理无关。成功后自动保存并关闭"
+                           "(最长等10分钟)"})
 
 
 @app.route("/api/login/running")
 def api_login_running():
-    alive = [{"platform": v["platform"], "ident": v["ident"],
-              "started": v["started"]}
+    alive = [{"platform": k, "started": v["started"]}
              for k, v in LOGIN_PROCS.items() if v["proc"].poll() is None]
     return jsonify({"running": alive})

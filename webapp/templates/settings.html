@@ -37,6 +37,20 @@
 </div>
 
 <div class="card">
+  <h3>平台登录 <span class="muted">平台的"浏览凭据", 与账号管理无关</span></h3>
+  <p class="muted">抓取需要"登录着看"的平台(富途/快手等): 用<b>任一手机号</b>(如闲置号)
+  在弹出的窗口里登录一次即可 —— 这份登录态只用来浏览被跟踪账号的主页,
+  跟踪哪些账号在「账号管理」页配, 两者互不影响。登录态存 profiles/&lt;平台&gt;, 长期有效。</p>
+  <table>
+    <thead><tr><th>平台</th><th>跟踪账号</th><th>登录档案</th>
+      <th>最近抓取</th><th>实时检测</th><th></th></tr></thead>
+    <tbody id="login-rows"><tr><td colspan="6" class="muted">加载中…</td></tr></tbody>
+  </table>
+  <p class="muted">「检测」用无头浏览器快速验证登录态(绿=已登录 / 红=已失效 /
+  黄=无法判断, 如快手对无头渲染限制)。X/YouTube 走官方 API 无需登录, 不在此列。</p>
+</div>
+
+<div class="card">
   <h3>腾讯文档</h3>
   <p>每日数据写入的在线表格(浏览器打开 docs.qq.com/sheet/<span id="tdoc-id"></span>)。
   授权状态: <span id="tdoc-token" class="badge"></span></p>
@@ -109,6 +123,76 @@ document.getElementById("btn-tdoc-auth").onclick = async () => {
     }
   }, 3000);
 };
+/* ---------- 平台登录面板 ---------- */
+function lgBadge(e) {
+  if (e.probe) {
+    const p = e.probe;
+    if (p.logged_in === true)
+      return `<span style="color:#2e7d32">● 已登录</span> <span class="muted">${p.checked_at}</span>`;
+    if (p.logged_in === false)
+      return `<span style="color:#c62828">● 已失效</span> <span class="muted">${p.detail || ""}</span>`;
+    return `<span style="color:#f9a825">● 无法判断</span> <span class="muted">${p.detail || ""}</span>`;
+  }
+  if (e.crawl_login_error)
+    return `<span style="color:#c62828">● 抓取报登录失效</span> <span class="muted">${e.crawl_login_error}</span>`;
+  if (e.profile_exists)
+    return `<span style="color:#666">○ 有档案(未验证)</span>`;
+  return `<span style="color:#999">○ 未登录</span>`;
+}
+
+let LG_RUNNING = [];
+async function loadLogin() {
+  const d = await (await fetch("/api/login/entries")).json();
+  const runKeys = new Set(LG_RUNNING.map(r => r.platform));
+  document.getElementById("login-rows").innerHTML =
+    (d.entries || []).map(e => {
+      const busy = runKeys.has(e.platform);
+      return `<tr>
+        <td>${e.label}${e.needs_login ? ' <span class="muted">(建议登录)</span>' : ""}</td>
+        <td>${e.n_accounts ? e.n_accounts + " 个" : "暂无"}</td>
+        <td class="muted">profiles/${e.profile}</td>
+        <td>${e.crawl_login_error ? `<span style="color:#c62828">有登录类报错</span>` : "正常"}</td>
+        <td>${busy ? `<span style="color:#1565c0">◌ 登录窗口进行中…</span>` : lgBadge(e)}</td>
+        <td class="acts">
+          <button class="gologin" data-p="${e.platform}"
+                  ${busy ? "disabled" : ""}>${busy ? "登录中…" : "去登录"}</button>
+          <button class="lgprobe" data-p="${e.platform}"
+                  ${busy ? "disabled" : ""}>检测</button>
+        </td>
+      </tr>`;
+    }).join("");
+}
+
+async function pollLoginRunning() {
+  const d = await (await fetch("/api/login/running")).json();
+  const was = LG_RUNNING.length;
+  LG_RUNNING = d.running || [];
+  if (was && !LG_RUNNING.length) loadLogin();   // 登录窗口刚关闭 → 刷新
+}
+setInterval(pollLoginRunning, 3000);
+
+document.getElementById("login-rows").addEventListener("click", async e => {
+  const t = e.target, p = t.dataset.p;
+  if (t.classList.contains("gologin")) {
+    if (!confirm(`即将在本机弹出「${p}」登录窗口。\n用任意手机号(如闲置号)登录即可,`
+      + ` 这份登录态只用于浏览被跟踪账号的主页。\n继续?`)) return;
+    const r = await (await fetch("/api/login/start", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({platform: p})})).json();
+    alert(r.msg);
+    if (r.ok) { LG_RUNNING.push({platform: p}); loadLogin(); }
+    return;
+  }
+  if (t.classList.contains("lgprobe")) {
+    t.disabled = true; t.textContent = "检测中…";
+    const r = await (await fetch("/api/login/probe", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({platform: p})})).json();
+    if (!r.ok) alert(r.msg);
+    loadLogin();
+  }
+});
+
 load();
 </script>
 {% endblock %}
