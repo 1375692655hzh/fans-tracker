@@ -299,11 +299,14 @@ def status() -> None:
         for k, rec in sorted(last.get("accounts", {}).items()):
             print(f"  {last['date']} {k}: 粉丝{rec.get('followers')} "
                   f"内容{rec.get('content')} 阅读{rec.get('views')}")
-    print(f"腾讯文档: file_id={settings.get('tdoc', {}).get('file_id')}")
+    fid = (settings.get("tdoc") or {}).get("file_id") or ""
+    print(f"腾讯文档: {'已绑定 ' + fid[:6] + '…' if fid else '未绑定'}")
     import tdoc
     try:
+        if not fid:
+            raise tdoc.TDocError("未绑定表格: 控制台「设置」页粘贴表格完整链接保存")
         cli = tdoc.SheetClient()
-        sheets = cli.get_sheets(settings["tdoc"]["file_id"])
+        sheets = cli.get_sheets(fid)
         print(f"  Token ✓, 现有 sheet: "
               + ", ".join(s.get("sheet_name", "?") for s in sheets[:15]))
     except tdoc.TDocError as e:
