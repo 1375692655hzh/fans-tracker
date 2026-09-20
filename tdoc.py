@@ -323,7 +323,9 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
     from fetchers.browser_page import SPEC as _SPEC
     existing = {}
     if (any(rec.get("manual") or _SPEC.get(rec.get("platform", ""), {})
-                .get("manual") for rec in accounts.values())
+                .get("manual")
+            or _SPEC.get(rec.get("platform", ""), {}).get("views_manual")
+            for rec in accounts.values())
             and target):
         try:
             grid = cli.read_cells(file_id, sheet_id,
@@ -335,17 +337,27 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
         except Exception as e:
             logger.warning(f"读取现有表格失败(手动行保留跳过): {e}")
 
+    vcol = header.index("阅读/播放量") if "阅读/播放量" in header else -1
     rows = [list(header)]
     for key in sorted(accounts):
         rec = accounts[key]
         row = [_field(col, rec, key) for col in header]
-        if rec.get("manual") or _SPEC.get(rec.get("platform", ""), {}).get("manual"):
+        sp = _SPEC.get(rec.get("platform", ""), {}) or {}
+        if rec.get("manual") or sp.get("manual"):
             old = existing.get((str(row[0]), str(row[1]), str(row[2])))
             if old:
                 for i in range(3, len(row)):    # 身份三列外的数据列
                     ov = str(old[i]).strip() if i < len(old) else ""
                     if ov and ov != "-":
                         row[i] = old[i]
+        elif sp.get("views_manual") and vcol >= 0:
+            # 仅保留浏览量列的人工值; "0"是旧版自动写的占位(昨日无发帖=0),
+            # 不当作人工值保留, 让用户重新手填
+            old = existing.get((str(row[0]), str(row[1]), str(row[2])))
+            if old and vcol < len(old):
+                ov = str(old[vcol]).strip()
+                if ov and ov not in ("-", "0"):
+                    row[vcol] = old[vcol]
         rows.append(row)
     cli.write_csv(file_id, sheet_id, rows)
     logger.info(f"腾讯文档: 已写入 {len(rows) - 1} 个账号 → sheet「{date}」")

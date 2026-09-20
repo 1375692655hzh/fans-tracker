@@ -36,7 +36,12 @@ COOKIE_MARKERS = {
     "zhihu": ["z_c0"],
     "bilibili": ["SESSDATA", "DedeUserID"],
     "xhs": ["web_session"],
+    "changqiao": ["refresh_token", "x-bridge-token"],   # 登录后才有的凭据
 }
+
+# 首页匿名即可完整浏览的平台: 页面探测"打开成功"不能证明登录(假绿来源),
+# 且未配 cookie 标记 —— 如实报"无法区分"; 这些平台抓取本身不依赖登录。
+PAGE_PROBE_UNVERIFIABLE = {"ths", "laohu", "eastmoney"}
 
 
 def probe_target(platform: str, ident: str = "") -> tuple:
@@ -109,8 +114,13 @@ async def _probe_async(platform: str, prof: str, home: str,
             # 内容始终渲染不出: 未登录/被风控
             out.update(logged_in=False, detail="页面内容为空(未登录或被风控)")
         else:
-            out.update(logged_in=True,
-                       detail=f"首页正常打开 {url[:60] or home[:60]}")
+            if platform in PAGE_PROBE_UNVERIFIABLE:
+                out.update(logged_in=None,
+                           detail="该平台匿名即可浏览首页, 页面探测无法区分"
+                                  "登录态(不影响抓取)")
+            else:
+                out.update(logged_in=True,
+                           detail=f"首页正常打开 {url[:60] or home[:60]}")
         await ctx.close()
         return out
 

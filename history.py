@@ -21,11 +21,14 @@ DATA = ROOT / "data" / "history.json"
 
 
 def account_key(acct: dict) -> str:
-    """平台:标识。标识优先 handle(x/youtube), 否则 url 去协议头。"""
+    """平台:标识。标识优先 handle(x/youtube), 否则 url 去协议头;
+    两者皆无(手动填写型如公众号)用账号名, 避免同平台多账号互相覆盖。"""
     pid = (acct.get("handle") or "").strip().lstrip("@")
     if not pid:
         url = (acct.get("url") or "").strip()
         pid = url.replace("https://", "").replace("http://", "").rstrip("/")
+    if not pid:
+        pid = (acct.get("name") or "").strip()
     return f"{acct.get('platform')}:{pid}"
 
 

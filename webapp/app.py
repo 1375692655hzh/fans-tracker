@@ -512,11 +512,14 @@ def api_login_entries():
     for a in load_accounts():
         acc_by_plat.setdefault(a["platform"], []).append(a)
     # 最近一次抓取中各平台的登录相关报错(聚合到平台)
+    # 用精确特征匹配, 避免任何文案带"登录"二字就误报(如浏览量人工填提示)
+    import re as _re
+    login_pat = _re.compile(r"未登录|登录态失效|登录失效|需登录|需要登录|登录墙")
     crawl_err = {}
     for key, rec in last.items():
         plat = key.split(":", 1)[0]
         errs = " ".join((rec.get("errors") or {}).values())
-        if "登录" in errs and plat not in crawl_err:
+        if login_pat.search(errs) and plat not in crawl_err:
             crawl_err[plat] = errs[:80]
     entries = []
     for plat in LOGIN_URLS:

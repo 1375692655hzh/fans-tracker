@@ -52,20 +52,23 @@ SPEC = {
         "items": {
             "date_res": r"(昨天|前天|今天|\d{1,2}-\d{1,2})\s*\d{1,2}:\d{2}",
         },
-        "login_marks": ["login"], "needs_login": False,
+        "login_marks": ["login"], "needs_login": False, "views_manual": True,
     },
     "changqiao": {
         "label": "长桥",
-        # 页面 "7关注 | 2596关注者"
+        # 页面 "7关注 | 2596关注者"; 默认"动态"tab匿名/登录都显示"暂无动态",
+        # 帖子在"原创"tab(独立路由 /original, [role=tab]可点)
         "labels": ["粉丝", "关注者", "Followers"],
         "prio_res": [NUM + r"\s*关注者", NUM + r"\s*粉丝"],
         "content": {"labels": []},
         "views": {"labels": []},
-        # feed: "发布了长文 | 昨日 19:59"
+        # feed(原创tab): 实测日期是 "9 月 15 日"(字间带空格, 无时分, ⋅分隔)
         "items": {
-            "date_res": r"(昨日|昨天|前天|今天|\d{1,2}-\d{1,2})\s*\d{1,2}:\d{2}",
+            "date_res": r"(昨日|昨天|前天|今天|\d{1,2}\s*月\s*\d{1,2}\s*日"
+                        r"|\d{1,2}-\d{1,2})(\s*\d{1,2}:\d{2})?",
         },
-        "login_marks": ["signin", "login"], "needs_login": False,
+        "items_tab": "原创",   # 默认"动态"tab恒为空, 点"原创"才渲染帖子
+        "login_marks": ["signin", "login"], "needs_login": False, "views_manual": True,
     },
     "eastmoney": {
         "label": "东方财富",
@@ -101,7 +104,7 @@ SPEC = {
         "items": {
             "date_res": r"(\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})",
         },
-        "login_marks": ["login"], "needs_login": False,
+        "login_marks": ["login"], "needs_login": False, "views_manual": True,
     },
     "weibo": {
         "label": "微博",
@@ -111,9 +114,10 @@ SPEC = {
         "content": {"labels": []},
         "views": {"labels": []},   # 微博不公开阅读量
         "items": {
-            "date_res": r"(今天|昨天|前天|\d{1,2}月\d{1,2}日)\s*\d{1,2}:\d{2}",
+            "date_res": r"(今天|昨天|前天|\d{1,2}月\d{1,2}日|\d{1,2}-\d{1,2})"
+                        r"\s*\d{1,2}:\d{2}",
         },
-        "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False,
+        "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False, "views_manual": True,
     },
     "zhihu": {
         "label": "知乎",
@@ -125,7 +129,7 @@ SPEC = {
         "items": {
             "date_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}",
         },
-        "login_marks": ["signin", "/login", "unhuman"], "needs_login": True,
+        "login_marks": ["signin", "/login", "unhuman"], "needs_login": True, "views_manual": True,
     },
     "bilibili": {
         "label": "B站",
@@ -169,16 +173,20 @@ SPEC = {
         "label": "抖音",
         # 公开主页匿名多被登录墙挡; 有任一抖音登录态即可稳定看任意公开主页
         # (作品网格带播放数, 日期需进详情; 多账号同 xhs 方案独立登录态)
-        "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
+        # 页头"关注N1 粉丝N2": 数字在标签后, 必须先匹配 粉丝+数字 否则抓到关注数
+        "labels": ["粉丝"], "prio_res": [r"粉丝\s*" + NUM, NUM + r"\s*粉丝"],
         "content": {"labels": []},
         "views": {"labels": []},
+        # 头部"作品 60": 累计作品数快照, content=日增量由 main 统一作差
+        "content_total_res": r"作品\s*[：:]?\s*(\d[\d,.]*)",
         "login_marks": ["login"], "needs_login": True,
         "login_per_account": True,
     },
     "kuaishou": {
         "label": "快手",
         # 匿名访问主页为空壳(63字节); 需任一快手登录态即可看别人主页
-        "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
+        # 页头"关注N1 粉丝N2": 数字在标签后, 必须先匹配 粉丝+数字 否则抓到关注数
+        "labels": ["粉丝"], "prio_res": [r"粉丝\s*" + NUM, NUM + r"\s*粉丝"],
         "content": {"labels": []},
         "views": {"labels": []},
         "login_marks": ["login"], "needs_login": True,
@@ -441,11 +449,22 @@ async def extract_account(page, account, spec, settings, logger,
     r["name"] = (_clean_title_name(found_title)
                  or _clean_title_name(last_out.get("h1") or "")) or r["name"]
 
+    # 累计内容总数快照(如抖音"作品 60"): 存 content_total,
+    # content=日增量由 main._apply_content_delta 统一算(同X发帖数口径)
+    ctr = spec.get("content_total_res")
+    if ctr and last_out.get("body"):
+        mm = re.search(ctr, last_out["body"])
+        if mm:
+            v = parse_count(mm.group(1))
+            if v is not None:
+                r["content_total"] = v
+
     # 「昨日内容」: 内容列表可能在单独页面(如 B站投稿页/小红书后台)
     if spec.get("items"):
         target = spec.get("items_url") or ""
         if not target and spec.get("items_url_suffix"):
-            target = url.rstrip("/") + spec["items_url_suffix"]
+            # 去掉查询参数(如长桥 ?channel=xx 推广码), 否则拼出的路径无效
+            target = url.split("?", 1)[0].rstrip("/") + spec["items_url_suffix"]
         if target and target != url:
             try:
                 await page.goto(target, wait_until="domcontentloaded",
@@ -463,6 +482,35 @@ async def extract_account(page, account, spec, settings, logger,
                         pass
             except Exception as e:
                 logger.info(f"[{key}] 内容列表页打开失败: {str(e)[:80]}")
+        elif spec.get("items_tab"):
+            # 内容在同页另一 tab(如长桥"原创"): SPA 直接 goto 该路由是空壳,
+            # 必须先加载主页再点 tab 触发客户端渲染
+            try:
+                tab_name = spec["items_tab"]
+                loc = page.locator(f'[role=tab]:has-text("{tab_name}")')
+                if not await loc.count():   # 长桥实际是 div.tabs-item-content
+                    loc = page.locator(
+                        f'.tabs-item-content:has-text("{tab_name}")')
+                if not await loc.count():   # 再兜底: 文本恰好等于 tab 名
+                    loc = page.get_by_text(tab_name, exact=True)
+                if await loc.count():
+                    await loc.first.click(timeout=8000)
+                    last_out = {}            # tab 切换后的新页面内容
+                    for _ in range(6):
+                        await page.wait_for_timeout(wait)
+                        try:
+                            out = await page.evaluate(EXTRACT_JS, cfg)
+                            if out and out.get("body") and \
+                                    "暂无动态" not in out["body"][:600]:
+                                last_out = out
+                                break
+                            last_out = out or last_out
+                        except Exception:
+                            pass
+                else:
+                    logger.info(f"[{key}] 未找到 tab「{spec['items_tab']}」")
+            except Exception as e:
+                logger.info(f"[{key}] 点击内容tab失败: {str(e)[:80]}")
         if r["content"] is None and last_out.get("body"):
             from datetime import datetime as _dt
             yi = parse_yesterday_items(last_out["body"], spec["items"],
@@ -481,6 +529,12 @@ async def extract_account(page, account, spec, settings, logger,
                                 "(平台不公开浏览)")
                 elif yi["count"] == 0:
                     r["views"] = 0          # 昨日没发, 浏览合计=0(如实)
+    # 浏览量人工填写型平台: 非号主拿不到(或平台无此机制),
+    # 强制置空, 表格端保留用户手填值, 不用自动值/0覆盖
+    # (措辞避开"登录"字样, 以免控制台误报"登录类报错")
+    if spec.get("views_manual"):
+        r["views"] = None
+        r["errors"]["views"] = "浏览量由人工在表格填写(平台不向非号主公开)"
     for m in ("followers", "content", "views"):
         if r[m] is None and m not in r["errors"]:
             r["errors"][m] = "页面未出现该指标(公开页无此数据)"
@@ -523,7 +577,7 @@ def _classify_item_date(token: str, now):
     if m:
         y, mo, d = map(int, m.groups())
         return date(y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else None
-    m = re.search(r"(\d{1,2})[/月-](\d{1,2})", t)
+    m = re.search(r"(\d{1,2})\s*[/月-]\s*(\d{1,2})", t)
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:

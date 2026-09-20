@@ -51,9 +51,11 @@
     <tbody id="login-rows"><tr><td colspan="6" class="muted">加载中…</td></tr></tbody>
   </table>
   <p class="muted">「去登录」弹出的窗口<b>不限时、绝不自动关闭</b>: 用任意手机号
-  慢慢登录, 完成后自己关掉窗口即可, 登录态自动保存。打开本页会自动检测一轮,
-  绿●=已登录, 红●=未登录/失效。抖音/快手/B站等按会话cookie判定(准且不受风控影响),
-  其余平台按首页是否跳登录页判定。X/YouTube 走官方 API 无需登录, 不在此列。</p>
+  慢慢登录, 完成后自己关掉窗口即可, 登录态自动保存。
+  登录状态点「一键检测全部」或每行「检测」按钮手动检测:
+  绿●=已登录, 黄●=无法判断(匿名也能浏览首页/无头受限), 红●=未登录/失效。
+  抖音/快手/B站等按会话cookie判定(准且不受风控影响)。
+  X/YouTube 走官方 API 无需登录, 不在此列。</p>
 </div>
 
 <div class="card">
@@ -186,12 +188,7 @@ async function loadLogin() {
         </td>
       </tr>`;
     }).join("");
-  // 进页面自动跑一轮检测(每页一次), 状态自动变绿/红
-  if (!AUTO_PROBED && !LG_BATCH.running
-      && (d.entries || []).some(e => e.profile_exists && !e.probe)) {
-    AUTO_PROBED = true;
-    document.getElementById("btn-probe-all").click();
-  } else if (LG_BATCH.running) {
+  if (LG_BATCH.running) {
     ensureBatchTimer();
   }
 }
@@ -227,7 +224,6 @@ async function pollLoginRunning() {
 }
 setInterval(pollLoginRunning, 3000);
 
-let AUTO_PROBED = false;         // 进页面自动跑一轮检测(每页一次)
 
 document.getElementById("login-rows").addEventListener("click", async e => {
   const t = e.target, p = t.dataset.p;
