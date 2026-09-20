@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import re
 import sys
 from pathlib import Path
 
@@ -75,6 +76,7 @@ def interactive_login(platform: str, ident: str = "") -> int:
     if platform not in LOGIN_URLS:
         print(f"平台 {platform} 不在登录列表: {', '.join(LOGIN_URLS)}")
         return 1
+    ident = re.sub(r"^https?://", "", (ident or "").strip())  # 与抓取侧哈希口径一致
     from browser import profile_name
     prof = profile_name(platform, ident)
     if ident:
