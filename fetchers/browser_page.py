@@ -17,8 +17,11 @@ SHOT_DIR = ROOT / "logs" / "screenshots"
 NUM = r"(\d[\d,.]*\s*[万亿wWkK]?)"
 
 # ---------- 平台规格 ----------
-# followers/content/views 各支持: prio 平台专属权威正则 / labels 页面文案
-# needs_login: True 表示建议带登录态(未登录多半被墙或看不到)
+# followers: prio 平台专属权威正则 / labels 页面文案
+# items(可选): 「昨日内容」口径 —— 内容列表的 日期/浏览 正则。
+#   date_res 捕获日期 token(须带 HH:MM 或发布动词锚定, 防止标题里的数字误配);
+#   views_res 可选, 每条内容的浏览数; window=日期与浏览视为同条目的最大字符距。
+# 配了 items 的平台: 内容数=昨日发布数, 阅读播放量=昨日条目浏览合计。
 SPEC = {
     "futu": {
         "label": "富途",
@@ -28,14 +31,27 @@ SPEC = {
         "content": {"labels": []},   # 页面无总内容数(文章标题含日期易误配)
         "views": {"labels": [], "prio_res": [
             r"((?:\d[\d,.]*\s*[万亿wWkK]?\s*\+\s*)*\d[\d,.]*\s*[万亿wWkK]?)\s*来访"]},
+        # feed: "…浏览 9.5万|作者|参与了话题|·|09/18 19:11|专栏 标题…"
+        # (只认发布/参与类动作, "赞了"不算; | 分隔符要放行)
+        "items": {
+            "date_res": r"(?:发表了文章|发布了|原创了|参与了话题|留下了心情)"
+                       r"[\s\S]{0,30}?"
+                       r"(\d+小时前|\d+分钟前|昨天|前天|今天|"
+                       r"\d{1,2}/\d{1,2}\s+\d{1,2}:\d{2})",
+            "views_res": r"浏览\s*[：:]?\s*" + NUM, "window": 160,
+        },
         "login_marks": ["passport", "login"], "needs_login": True,
     },
     "xueqiu": {
         "label": "雪球",
-        # 页面头部 "47 关注 | 624 粉丝"(数字在前); 帖子 "帖子 563"
+        # 页面头部 "47 关注 | 624 粉丝"
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["帖子"], "prio_res": [r"帖子\s*[：:(（]?\s*" + NUM]},
+        "content": {"labels": []},
         "views": {"labels": []},
+        # feed: "昨天 20:05 · 来自雪球" / "09-16 20:31 ·" (标题里的日期无时间后缀)
+        "items": {
+            "date_res": r"(昨天|前天|今天|\d{1,2}-\d{1,2})\s*\d{1,2}:\d{2}",
+        },
         "login_marks": ["login"], "needs_login": False,
     },
     "changqiao": {
@@ -43,80 +59,92 @@ SPEC = {
         # 页面 "7关注 | 2596关注者"
         "labels": ["粉丝", "关注者", "Followers"],
         "prio_res": [NUM + r"\s*关注者", NUM + r"\s*粉丝"],
-        "content": {"labels": ["帖子", "主题", "动态"]},
+        "content": {"labels": []},
         "views": {"labels": []},
+        # feed: "发布了长文 | 昨日 19:59"
+        "items": {
+            "date_res": r"(昨日|昨天|前天|今天|\d{1,2}-\d{1,2})\s*\d{1,2}:\d{2}",
+        },
         "login_marks": ["signin", "login"], "needs_login": False,
     },
     "eastmoney": {
         "label": "东方财富",
-        # i 页头部 "160粉丝0关注 179获赞"; 页面无总阅读量(日期会误配, 不抓)
+        # i 页头部 "160粉丝0关注 179获赞"; 帖子列表 "发布于 09-18 19:03 | 189 阅读"
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["文章", "帖子", "微博"]},
+        "content": {"labels": []},
         "views": {"labels": []},
+        "items": {
+            "date_res": r"发布于\s*(昨天|前天|今天|\d+小时前|\d{2}-\d{2})",
+            "views_res": NUM + r"\s*阅读", "window": 60, "pair": "after",
+        },
         "login_marks": ["passport", "/login"], "needs_login": False,
     },
     "laohu": {
         "label": "老虎",
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["帖子", "文章"]},
-        "views": {"labels": ["阅读"]},
+        "content": {"labels": []},
+        "views": {"labels": []},
         "login_marks": ["login", "signin"], "needs_login": False,
     },
     "ths": {
         "label": "同花顺",
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["帖子", "文章", "微博"]},
-        "views": {"labels": ["阅读"]},
+        "content": {"labels": []},
+        "views": {"labels": []},
         "login_marks": ["login"], "needs_login": False,
     },
     "weibo": {
         "label": "微博",
-        # 主页 "9粉丝 | 10关注 | 24转评赞"; 内容数仅登录后"全部微博(N)"
+        # 主页 "9粉丝 | 10关注 | 24转评赞"; feed 匿名截断, 登录后完整
         "labels": ["粉丝"], "prio_res": [
             r"全部粉丝\s*[（(]\s*" + NUM + r"\s*[）)]", NUM + r"\s*粉丝"],
-        "content": {"labels": [], "prio_res": [
-            r"全部微博\s*[（(]\s*" + NUM + r"\s*[）)]"]},
-        "views": {"labels": []},
+        "content": {"labels": []},
+        "views": {"labels": []},   # 微博不公开阅读量
+        "items": {
+            "date_res": r"(今天|昨天|前天|\d{1,2}月\d{1,2}日)\s*\d{1,2}:\d{2}",
+        },
         "login_marks": ["newlogin", "login.sina", "/login"], "needs_login": False,
     },
     "zhihu": {
         "label": "知乎",
-        # 主页 "关注了 1 | 关注者 58"; 内容栏 "回答3 | 文章169 | 专栏1"
-        # 匿名访问会被风控(unhuman), 必须登录态(已复用 auto-publisher)
+        # 主页 "关注了 1 | 关注者 58"; 动态 "2026-09-18 19:00 | 发表了文章"
         "labels": ["关注者"], "prio_res": [
             r"关注者\s*[：:]?\s*" + NUM, NUM + r"\s*关注者"],
-        "content": {"labels": ["文章"], "prio_res": [r"文章\s*(\d+)"]},
+        "content": {"labels": []},
         "views": {"labels": []},   # 总阅读量仅创作中心有, 公开页无
+        "items": {
+            "date_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}",
+        },
         "login_marks": ["signin", "/login", "unhuman"], "needs_login": True,
     },
     "bilibili": {
         "label": "B站",
-        # 空间页 "关注数 686 | 粉丝数 1798.9万", 投稿 "999+"(平台封顶)
+        # 空间页 "关注数 686 | 粉丝数 1798.9万"; 投稿列表卡不带日期→昨日口径暂缺
         "labels": ["粉丝"], "prio_res": [r"粉丝数?\s*[量：:]*\s*" + NUM],
-        "content": {"labels": ["投稿"], "prio_res": [r"投稿\s*[（(:：]?\s*" + NUM]},
-        "views": {"labels": []},   # 总播放匿名不可见(需登录 upstat)
+        "content": {"labels": []},
+        "views": {"labels": []},
         "login_marks": ["passport"], "needs_login": False,
         "api_hook": "bilibili",   # 粉丝走 relation/stat 公开接口(见 bilibili_api)
     },
     "xhs": {
         "label": "小红书",
         "labels": ["粉丝"], "prio_res": [r"粉丝\s*[（(:：]?\s*" + NUM],
-        "content": {"labels": ["笔记"], "prio_res": [r"笔记\s*[（(:：]?\s*" + NUM]},
-        "views": {"labels": []},   # 小红书无公开总阅读, 获赞不等于阅读
+        "content": {"labels": []},   # 主页卡片无日期无阅读
+        "views": {"labels": []},
         "login_marks": ["login"], "needs_login": True,
     },
     "douyin": {
         "label": "抖音",
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["作品"], "prio_res": [r"作品\s*[（(:：]?\s*" + NUM]},
+        "content": {"labels": []},   # 作品网格不带日期(需进详情)
         "views": {"labels": []},
         "login_marks": ["login"], "needs_login": True,
     },
     "kuaishou": {
         "label": "快手",
         "labels": ["粉丝"], "prio_res": [NUM + r"\s*粉丝"],
-        "content": {"labels": ["作品", "视频"]},
-        "views": {"labels": ["播放"]},
+        "content": {"labels": []},
+        "views": {"labels": []},
         "login_marks": ["login"], "needs_login": False,
     },
     # 微信封闭生态, 需后台登录, 本期跳过(接口预留)
@@ -205,6 +233,7 @@ EXTRACT_JS = """(cfg) => {
         title: (document.title || '').slice(0, 80),
         h1: ((document.querySelector('h1') || {}).innerText || '')
             .replace(/\\s+/g, ' ').slice(0, 40),
+        body: body.slice(0, 30000),
     };
 }"""
 
@@ -264,6 +293,7 @@ async def extract_account(page, account, spec, settings, logger):
         r["errors"] = {"followers": f"打开主页失败: {str(e)[:100]}"}
         return r
     found_title = ""
+    found_body = ""
     for _ in range(rounds):
         await page.wait_for_timeout(wait)
         if _is_login_page(page.url, spec.get("login_marks", [])):
@@ -274,21 +304,48 @@ async def extract_account(page, account, spec, settings, logger):
             out = await page.evaluate(EXTRACT_JS, cfg)
         except Exception:
             out = {}
-        found_title = (out or {}).get("title") or found_title
+        out = out or {}
+        found_title = out.get("title") or found_title
+        found_body = out.get("body") or found_body
+        if spec.get("items") and _ == 1:   # 滚动触发 feed 懒加载
+            try:
+                await page.evaluate(
+                    "window.scrollTo(0, document.body.scrollHeight * .6)")
+                await page.wait_for_timeout(1200)
+                await page.evaluate("window.scrollTo(0, 0)")
+            except Exception:
+                pass
         if r["followers"] is None:
             r["followers"], raw = _first_int(out.get("followers"))
             if r["followers"] is not None:
                 logger.info(f"[{key}] 粉丝 {r['followers']} (原文 {raw!r})")
-        if r["content"] is None:
-            r["content"], raw = _first_int(out.get("content"))
-            if r["content"] is not None:
-                logger.info(f"[{key}] 内容数 {r['content']} (原文 {raw!r})")
-        if r["views"] is None:
+        # 「昨日内容」口径: 拿到正文且有 items 配置即解析一次
+        if spec.get("items") and r["content"] is None and found_body:
+            from datetime import datetime as _dt
+            yi = parse_yesterday_items(found_body, spec["items"],
+                                       _dt.now(), logger)
+            if yi["dated"] == 0:      # 没解析到任何日期 ≠ 昨日没发
+                r.setdefault("errors", {})["content"] = \
+                    "页面未解析到内容日期(可能未登录/懒加载)"
+            else:
+                r["content"] = yi["count"]
+                if yi["views"] is not None:
+                    r["views"] = yi["views"]
+                    logger.info(f"[{key}] 昨日内容 {yi['count']} 条, "
+                                f"浏览合计 {yi['views']}")
+                elif yi["count"]:
+                    logger.info(f"[{key}] 昨日内容 {yi['count']} 条"
+                                "(平台不公开浏览)")
+        if r["views"] is None and not spec.get("items"):
             r["views"], raw = _first_int(out.get("views"))
             if r["views"] is not None:
                 logger.info(f"[{key}] 阅读播放 {r['views']} (原文 {raw!r})")
-        # 粉丝是核心指标: 拿到粉丝且(内容或阅读拿不到但已轮询过半)就提前收
-        if r["followers"] is not None and _ > rounds // 2:
+        # 粉丝是核心指标: 拿到粉丝且其余指标已尽力就提前收
+        done_enough = (r["followers"] is not None
+                       and (spec.get("items") or r["content"] is not None)
+                       and (r["views"] is not None or spec.get("items")
+                            or not (spec.get("views") or {}).get("prio_res")))
+        if done_enough and _ > rounds // 2:
             break
         if None not in (r["followers"], r["content"], r["views"]):
             break
@@ -314,3 +371,94 @@ def _clean_title_name(title: str) -> str:
             t = t[:-len(suf)]
     t = t.lstrip("@").strip()
     return t[:24] if 0 < len(t) <= 24 else ""
+
+
+# ---------- 「昨日内容」解析 ----------
+
+def _classify_item_date(token: str, now):
+    """日期 token → datetime.date; 认不出返回 None。"""
+    from datetime import date, timedelta
+    t = token.strip()
+    if "昨天" in t or "昨日" in t:
+        return (now - timedelta(days=1)).date()
+    if "前天" in t:
+        return (now - timedelta(days=2)).date()
+    if "今天" in t:
+        return now.date()
+    m = re.search(r"(\d+)小时前", t)
+    if m:
+        return (now - timedelta(hours=int(m.group(1)))).date()
+    if re.search(r"\d+分钟前", t):
+        return now.date()
+    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        y, mo, d = map(int, m.groups())
+        return date(y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else None
+    m = re.search(r"(\d{1,2})[/月-](\d{1,2})", t)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return date(now.year, mo, d)
+    return None
+
+
+def parse_yesterday_items(body: str, cfg: dict, now, logger=None) -> dict:
+    """从内容列表文本解析昨日发布的内容数与浏览量合计。
+
+    cfg = SPEC["items"]: date_res 必填, views_res/window 可选。
+    返回 {"count": int, "views": int|None, "dated": 解析出日期的条目数}。
+    """
+    from datetime import timedelta
+    yesterday = (now - timedelta(days=1)).date()
+    dates = [(m.start(), m.group(0))
+             for m in re.finditer(cfg["date_res"], body)]
+    if not dates:
+        return {"count": 0, "views": None, "dated": 0}
+    ycnt = sum(1 for _, tok in dates
+               if _classify_item_date(tok, now) == yesterday)
+    if not cfg.get("views_res"):
+        return {"count": ycnt, "views": None, "dated": len(dates)}
+    window = int(cfg.get("window", 100))
+    pair = cfg.get("pair", "nearest")
+    views = []
+    for m in re.finditer(cfg["views_res"], body):
+        v = parse_count(m.group(1))
+        if v is not None:
+            views.append((m.start(), v))
+
+    def _nearest(vpos):
+        best, bi = None, -1
+        for i, (dpos, _) in enumerate(dates):
+            if i in used or abs(dpos - vpos) > window:
+                continue
+            if best is None or abs(dpos - vpos) < best:
+                best, bi = abs(dpos - vpos), i
+        return bi
+
+    def _directional(vpos, after=True):
+        # after: 日期之后到下一日期之前的段内; before: 上一日期之后到本日期段内
+        for i, (dpos, _) in enumerate(dates):
+            if i in used:
+                continue
+            nxt = dates[i + 1][0] if i + 1 < len(dates) else len(body)
+            if after and dpos < vpos < nxt:
+                return i
+            if not after and dpos <= vpos < nxt and vpos < nxt:
+                return i if vpos >= dpos else None
+        return -1
+
+    used, yviews = set(), []
+    for pos, v in views:
+        i = (_nearest(pos) if pair == "nearest"
+             else _directional(pos, after=(pair == "after")))
+        if i < 0:
+            continue
+        used.add(i)
+        if _classify_item_date(dates[i][1], now) == yesterday:
+            yviews.append(v)
+    if logger:
+        logger.info(f"    内容条目: 日期{len(dates)}个(昨日{ycnt})/"
+                    f"浏览{len(views)}个, 昨日浏览明细{yviews[:5]}")
+    return {"count": ycnt,
+            "views": sum(yviews) if yviews else None,
+            "dated": len(dates)}

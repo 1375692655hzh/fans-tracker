@@ -33,9 +33,9 @@ def fetch(account: dict) -> dict:
             return r
         r["name"] = user.get("name") or f"@{user.get('screen_name', handle)}"
         r["followers"] = user.get("followers")
-        r["content"] = user.get("tweets")
-        # 曝光/阅读量 X 不对外公开, 只能登录该账号的 Analytics 看 → 留空
-        for k in ("followers", "content"):
+        # 口径=昨日发布数: FxTwitter 无公开时间线接口, 拿不到每日推文
+        # (总推文数会误当"昨日数", 不填); 曝光量 X 本就不公开
+        for k in ("followers",):
             if not isinstance(r[k], int) or r[k] < 0:
                 r[k] = None
                 r["errors"][k] = "字段缺失或非法"
