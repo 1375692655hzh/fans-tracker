@@ -520,6 +520,13 @@ def api_login_probe():
     plat = (d.get("platform") or "").strip()
     if plat not in LOGIN_URLS:
         return jsonify({"ok": False, "msg": f"平台 {plat} 不支持登录检测"})
+    if not (ROOT / "profiles" / plat).exists():
+        # 没档案必然未登录; 不开浏览器(免得凭空建出空目录+误判绿)
+        return jsonify({"ok": True, "result": {
+            "platform": plat, "ident": "", "profile": plat,
+            "profile_exists": False, "logged_in": False,
+            "detail": "没有登录档案(点「去登录」创建)", "home": "",
+            "checked_at": datetime.now().strftime("%H:%M:%S")}})
     if not _probe_lock.acquire(blocking=False):
         return jsonify({"ok": False, "msg": "正在检测其他平台, 请稍候"})
     try:

@@ -179,7 +179,8 @@ async function loadLogin() {
           <button class="gologin" data-p="${e.platform}"
                   ${busy ? "disabled" : ""}>${busy ? "登录中…" : "去登录"}</button>
           <button class="lgprobe" data-p="${e.platform}"
-                  ${busy || LG_BATCH.running ? "disabled" : ""}>检测</button>
+                  ${busy || LG_BATCH.running || !e.profile_exists ? "disabled" : ""}
+                  title="${e.profile_exists ? "" : "先点「去登录」建立登录档案"}">检测</button>
         </td>
       </tr>`;
     }).join("");
