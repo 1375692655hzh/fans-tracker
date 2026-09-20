@@ -45,6 +45,36 @@ def load_settings() -> dict:
         log.warning("settings.yaml 读取失败(%s), 用默认值", e)
         d = {}
     lf = ROOT / "config" / "settings.local.yaml"
+    # 一次性迁移: 老版本把 file_id 存在 tracked 的 settings.yaml 里,
+    # 升级/覆盖更新(reset --hard、重解压)会把它冲回模板 → 「抓取正常但
+    # 突然不写表」的无声故障。发现即自动挪入 local(不进git), 两边都保平安。
+    fid = (d.get("tdoc") or {}).get("file_id")
+    if fid:
+        import yaml as _y
+        local = {}
+        if lf.exists():
+            try:
+                local = _y.safe_load(lf.read_text(encoding="utf-8")) or {}
+            except Exception:
+                local = {}
+        if not (local.get("tdoc") or {}).get("file_id"):
+            local.setdefault("tdoc", {})["file_id"] = fid
+            lf.write_text(
+                "# 本机私有配置(不进git): 腾讯文档等\n"
+                + _y.safe_dump(local, allow_unicode=True, sort_keys=False),
+                encoding="utf-8")
+            log.info("已把腾讯文档表格ID迁移到 settings.local.yaml(升级保护)")
+        # 同步把 tracked 模板里的 ID 剥掉, 保持下次覆盖更新不再产生迁移
+        (d.get("tdoc") or {}).pop("file_id", None)
+        try:
+            f = ROOT / "config" / "settings.yaml"
+            txt = f.read_text(encoding="utf-8")
+            if "file_id" in txt:
+                clean = _y.safe_dump(d, allow_unicode=True, sort_keys=False)
+                f.write_text(clean, encoding="utf-8")
+        except Exception as e:
+            log.warning("settings.yaml 剥离 file_id 失败(不影响使用): %s", e)
+        d["tdoc"]["file_id"] = fid        # 本次调用照常可用
     if lf.exists():
         try:
             local = yaml.safe_load(lf.read_text(encoding="utf-8")) or {}
