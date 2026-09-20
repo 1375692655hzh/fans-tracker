@@ -3,6 +3,7 @@
 启动: python main.py web   →  http://127.0.0.1:8787
 """
 
+import re
 import subprocess
 import sys
 import threading
@@ -120,6 +121,57 @@ def _validate_account(d: dict):
     return "", plat, owner, name, url, handle
 
 
+# App 分享短链域 → 自动解析成标准主页链接
+SHORT_LINK_DOMAINS = ("xhslink.cn", "v.douyin.com", "b23.tv",
+                      "v.kuaishou.com", "t.10jqka.com.cn/lgt/community")
+
+
+def resolve_share_link(url: str) -> tuple:
+    """解析 App 分享短链/带跟踪参数的链接 → (标准主页URL, 是否登录墙截断)。
+
+    跟随跳转但遇到登录页就停(保留最后一跳有效地址)。失败返回原链接。"""
+    import requests
+    from urllib.parse import urljoin
+    cur = url
+    try:
+        for _ in range(6):
+            r = requests.get(
+                cur, allow_redirects=False, timeout=15,
+                headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS "
+                         "17_5 like Mac OS X) AppleWebKit/605.1.15"})
+            loc = r.headers.get("Location", "")
+            if not loc:
+                break
+            if not loc.startswith("http"):
+                loc = urljoin(cur, loc)
+            if any(k in loc.lower() for k in ("login", "passport", "sso")):
+                break                      # 登录墙: 前一跳才是有效主页
+            cur = loc
+    except Exception:
+        pass
+    return cur, "login" in cur.lower()
+
+
+def _finalize_link(plat: str, url: str) -> tuple:
+    """平台链接标准化。返回 (url, share_url, msg附加)。"""
+    share_url = ""
+    extra = ""
+    if plat == "xhs" and "xhslink.cn" in url:
+        resolved, _ = resolve_share_link(url)
+        m = re.search(r"user/profile/([0-9a-f]{16,32})", resolved)
+        if not m:
+            return url, "", " ⚠ 短链解析失败, 请改填 xiaohongshu.com/user/profile/ 主页链接"
+        share_url = url                  # 短链保留: 免登录兜底要用
+        url = f"https://www.xiaohongshu.com/user/profile/{m.group(1)}"
+        extra = " (短链已解析并启用免登录兜底)"
+    elif plat != "xhs" and any(d in url for d in SHORT_LINK_DOMAINS):
+        resolved, wall = resolve_share_link(url)
+        if not wall and resolved != url:
+            url = resolved.split("?")[0] if plat != "ths" else resolved
+            extra = " (分享链接已解析为标准主页)"
+    return url, share_url, extra
+
+
 def _fmt_account_lines(plat, owner, name, url, handle) -> list:
     lines = [f"  - platform: {plat}"]
     for k, v in (("owner", owner), ("name", name)):
@@ -135,14 +187,22 @@ def add_account(f: Path, d: dict) -> dict:
     err, plat, owner, name, url, handle = _validate_account(d)
     if err:
         return {"ok": False, "msg": err}
+    if plat not in API_FETCHERS:             # App 分享链接标准化
+        url, share_url, extra = _finalize_link(plat, url)
+        if "⚠" in extra:
+            return {"ok": False, "msg": extra.strip(" ⚠")}
+    else:
+        share_url, extra = "", ""
     lines = _fmt_account_lines(plat, owner, name, url, handle)
+    if share_url:
+        lines.append(f"    share_url: {share_url}")
     if f.exists() and "accounts:" in f.read_text(encoding="utf-8"):
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("\n" + "\n".join(lines) + "\n")
     else:                        # 首次: 文件不存在或没有 accounts: 头
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("accounts:\n" + "\n".join(lines) + "\n")
-    return {"ok": True, "msg": "已添加(立即生效)"}
+    return {"ok": True, "msg": "已添加(立即生效)" + extra}
 
 
 def update_account(f: Path, old: dict, new: dict) -> dict:
@@ -170,7 +230,13 @@ def update_account(f: Path, old: dict, new: dict) -> dict:
                 block.append(nxt)
                 j += 1
             if old_ident in "\n".join(block):
-                out.extend(_fmt_account_lines(plat, owner, name, url, handle))
+                blk_share = ""
+                for bl in block:
+                    if bl.strip().startswith("share_url:"):
+                        blk_share = bl.split("share_url:", 1)[1].strip()
+                out.extend(_fmt_account_lines(
+                    plat, owner, name, url, handle,
+                    (new.get("share_url") or "").strip() or blk_share))
                 done = True
                 i = j
                 continue

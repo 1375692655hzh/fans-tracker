@@ -8,7 +8,8 @@
       <select id="a-platform" required></select></label>
     <label>账号所有人 <input id="a-owner" placeholder="如: 张三" required></label>
     <label>账号名称 <input id="a-name" placeholder="留空自动抓昵称"></label>
-    <label>主页链接 <input id="a-url" placeholder="https://… (X/YouTube 不用填)"></label>
+    <label>主页链接 <input id="a-url" placeholder="https://… (X/YouTube 不用填)">
+      <span id="url-hint" class="muted" style="font-size:12px"></span></label>
     <label>@handle <input id="a-handle" placeholder="仅 X/YouTube: 如 owenwin888"></label>
     <button type="submit" id="btn-submit">添加</button>
     <button type="button" id="btn-cancel" style="display:none">取消编辑</button>
@@ -44,6 +45,22 @@ async function load() {
     const isApi = ["x", "youtube"].includes(sel.value);
     document.getElementById("a-url").disabled = isApi;
     document.getElementById("a-handle").disabled = !isApi;
+    const hints = {
+      ths: "⚠ 必填手机同花顺App里分享的主页链接: 打开对方主页 → 右上角分享 → 复制链接, 整段粘贴即可",
+      xhs: "建议填手机小红书App的分享短链(xhslink.cn/…), 自动解析并启用免登录兜底; 也可填主页链接(xiaohongshu.com/user/profile/…)",
+      douyin: "可填App分享短链(v.douyin.com/…)或主页链接(www.douyin.com/user/…), 短链自动解析",
+      kuaishou: "可填App分享短链或主页链接(www.kuaishou.com/profile/…); 需任一快手号登录后才能抓",
+      bilibili: "填主页链接 space.bilibili.com/数字 (App分享的 b23.tv 短链也可以, 自动解析)",
+      changqiao: "主页链接(longportapp.com 或 longbridge.com 均可)",
+      laohu: "主页链接(laohu8.com/personal/…)",
+      futu: "主页链接(q.futunn.com/profile/…); 该平台必须登录态",
+      eastmoney: "主页链接(i.eastmoney.com/数字)",
+      xueqiu: "主页链接(xueqiu.com/u/数字)",
+      weibo: "主页链接(weibo.com/u/数字)",
+      zhihu: "主页链接(zhihu.com/people/…)",
+    };
+    document.getElementById("url-hint").textContent =
+      hints[sel.value] || (isApi ? "X/YouTube 填右侧 @handle 即可" : "");
   };
   // 按已配账号动态生成登录命令提示
   const need = [...new Set((acc.accounts || [])
