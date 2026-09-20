@@ -507,7 +507,8 @@ def api_login_entries():
     return jsonify({"entries": entries,
                     "last_date": days[-1]["date"] if days else "",
                     "batch": {"running": BATCH["running"], "total": BATCH["total"],
-                              "done": BATCH["done"], "current": BATCH["current"]}})
+                              "done": BATCH["done"], "current": BATCH["current"],
+                              "started": BATCH["started"]}})
 
 
 @app.route("/api/login/probe", methods=["POST"])

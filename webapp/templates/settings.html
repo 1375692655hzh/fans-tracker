@@ -160,8 +160,9 @@ async function loadLogin() {
   } else {
     btn.disabled = false;
     btn.textContent = "一键检测全部";
-    st.textContent = LG_BATCH.total && LG_BATCH.done >= LG_BATCH.total
-      ? `上次检测完成: ${LG_BATCH.done}/${LG_BATCH.total}` : "";
+    st.textContent = LG_BATCH.total
+      ? `上次检测完成: ${LG_BATCH.done}/${LG_BATCH.total}`
+      : (LG_BATCH.started ? "没有可检测的登录档案 —— 先点某行的「去登录」" : "");
   }
   document.getElementById("login-rows").innerHTML =
     (d.entries || []).map(e => {
