@@ -143,15 +143,20 @@ SPEC = {
     },
     "xhs": {
         "label": "小红书",
-        # 公开主页 "粉丝 N|笔记 N"(无阅读); 每条阅读量只在创作者后台
-        # note-manager(需该账号本人登录)。多账号监控: 每账号独立登录态目录
-        # profiles/xhs_<hash8>, 扫码: python main.py login xhs <主页链接>
-        "labels": ["粉丝"], "prio_res": [r"粉丝\s*[（(:：]?\s*" + NUM],
+        # www 公开域匿名/登录态都会被"安全限制"拦截 → 全走创作者平台:
+        # /new/home 头部 "关注数 3|粉丝数 572"(实测), 还有近7日曝光/观看汇总
+        # note-manager 笔记行: "标题|2026-08-28 20:31|372|0|0|1|0"
+        #   (时间戳精确到分钟, 紧跟的第一列数字=阅读量)
+        # 多账号: 每账号独立登录态 profiles/xhs_<hash8>
+        #   扫码: python main.py login xhs <该账号公开主页链接>
+        "labels": ["粉丝"], "prio_res": [r"粉丝数\s*[：:]?\s*" + NUM],
         "content": {"labels": []},
         "views": {"labels": []},
+        "home_url": "https://creator.xiaohongshu.com/new/home",
         "items": {
-            "date_res": r"(昨天|前天|今天|\d{4}-\d{1,2}-\d{1,2})",
-            "views_res": r"阅读[量]?\s*[：:]?\s*" + NUM, "window": 120,
+            "date_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}",
+            "views_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}\s+"
+                        + NUM, "window": 30,
         },
         "items_url": "https://creator.xiaohongshu.com/new/note-manager",
         "login_marks": ["login"], "needs_login": True,
@@ -300,6 +305,8 @@ async def extract_account(page, account, spec, settings, logger):
     """
     url = (account.get("url") or "").strip()
     key = account["_key"]
+    # 平台可用指定起始页(如小红书 www 被拦, 直接进创作者平台首页)
+    start_url = spec.get("home_url") or url
     r = {"name": None, "followers": None, "content": None, "views": None,
          "errors": {}}
     wait = int((settings.get("crawl") or {}).get("page_wait_ms", 2500))
@@ -313,7 +320,7 @@ async def extract_account(page, account, spec, settings, logger):
         "vPrio": (spec.get("views") or {}).get("prio_res", []),
     }
     try:
-        await page.goto(url, wait_until="domcontentloaded",
+        await page.goto(start_url, wait_until="domcontentloaded",
                         timeout=int((settings.get("crawl") or {})
                                     .get("nav_timeout_ms", 45000)))
     except Exception as e:
