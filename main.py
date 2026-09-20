@@ -94,12 +94,14 @@ async def _fetch_browser_accounts(accounts: list, settings: dict) -> dict:
             ident = (key.split(":", 1)[1]
                      if spec.get("login_per_account") else "")
             page, _ = await sess.acquire_page(p, ident)
-            result = await extract_account(page, acct, spec, settings, log)
+            result = await extract_account(page, acct, spec, settings, log,
+                                           session=sess)
             for _ in range(retry):        # 核心指标失败重试
                 if not _retryable(result):
                     break
                 log.info(f"[{key}] 重试一次…")
-                result = await extract_account(page, acct, spec, settings, log)
+                result = await extract_account(page, acct, spec, settings, log,
+                                           session=sess)
             # bilibili: relation/stat 公开接口兜底粉丝(比页面稳)
             if spec.get("api_hook") == "bilibili":
                 mid = bilibili_api.extract_mid(acct)

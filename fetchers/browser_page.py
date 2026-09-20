@@ -161,6 +161,7 @@ SPEC = {
         "items_url": "https://creator.xiaohongshu.com/new/note-manager",
         "login_marks": ["login"], "needs_login": True,
         "login_per_account": True,
+        "share_fallback": True,   # 未登录: 手机UA+分享短链匿名抓粉丝/获赞
     },
     "douyin": {
         "label": "抖音",
@@ -298,10 +299,13 @@ def _first_int(cands):
     return None, ""
 
 
-async def extract_account(page, account, spec, settings, logger):
+async def extract_account(page, account, spec, settings, logger,
+                          session=None):
     """打开单个账号主页轮询提取 → fetch result dict。
 
-    page: 已带登录态的页面(调用方保证); settings 供等待参数。
+    page: 已带登录态的页面(调用方保证); session: BrowserSession(短链兜底用)。
+    小红书公开页方案: creator 未登录时, 用手机UA+分享短链匿名抓
+    粉丝/获赞与收藏(用户确认的该号流量口径), 免登录。
     """
     url = (account.get("url") or "").strip()
     key = account["_key"]
@@ -327,11 +331,75 @@ async def extract_account(page, account, spec, settings, logger):
         await _shot(page, f"{key}_goto_fail")
         r["errors"] = {"followers": f"打开主页失败: {str(e)[:100]}"}
         return r
+    # 兜底入口函数定义见下; 主循环发现登录墙时触发
+    share_url = account.get("share_url") or ""
+    share_fallback_on = (spec.get("share_fallback") and share_url
+                         and session is not None)
+
+    async def _share_fallback() -> bool:
+        """手机UA+分享短链匿名抓(粉丝/获赞与收藏)。成功改写 r 并返回 True。"""
+        logger.info(f"[{key}] creator 未登录, 走分享短链匿名兜底: {share_url}")
+        mp = None
+        try:
+            mp = await session.acquire_mobile_page()
+            await mp.goto(share_url, wait_until="domcontentloaded",
+                          timeout=45000)
+            mbody = ""
+            for _ in range(8):                 # 慢渲染, 耐心等
+                await mp.wait_for_timeout(3500)
+                if _ == 2:
+                    try:
+                        await mp.evaluate("window.scrollTo(0, 300)")
+                        await mp.wait_for_timeout(800)
+                        await mp.evaluate("window.scrollTo(0, 0)")
+                    except Exception:
+                        pass
+                mbody = await mp.evaluate(
+                    "() => (document.body&&document.body.innerText||'')"
+                    ".replace(/\\u00a0/g,' ')")
+                if len(mbody) > 100 and "安全" not in mbody:
+                    break
+            if "安全" in mbody or len(mbody) < 60:
+                r["errors"] = {"followers": "公开页被风控(重试或等入口放行)"}
+            else:
+                nm = re.search(r"^\s*(\S[^\n]{1,20})\n", mbody)
+                r["name"] = _clean_title_name(nm.group(1)) if nm else r["name"]
+                fm = re.search(r"(\d[\d,.]*)\s*\n?粉丝", mbody)
+                if fm:
+                    r["followers"] = parse_count(fm.group(1))
+                gm = re.search(r"(\d[\d,.]*)\s*\n?获赞与收藏", mbody)
+                if gm:                         # 该号口径: 获赞与收藏当流量
+                    r["views"] = parse_count(gm.group(1))
+                if r["followers"] is not None:
+                    logger.info(f"[{key}] 匿名公开页: 粉丝 {r['followers']}, "
+                                f"获赞与收藏 {r['views']}, "
+                                f"昵称 {r.get('name')!r}")
+                if r["followers"] is None:
+                    r["errors"] = {"followers": f"公开页未解析到粉丝数: "
+                                                f"{mbody[:80]!r}"}
+                else:
+                    r["errors"]["content"] = ("未登录: 公开页只展示最新1条"
+                                              "笔记, 无日期/阅读, 昨日数不可得")
+            return r["followers"] is not None
+        except Exception as e:
+            r["errors"] = {"followers": f"短链兜底失败: {str(e)[:90]}"}
+        finally:
+            if mp is not None:
+                try:
+                    await mp.close()
+                except Exception:
+                    pass
+        return False
     found_title = ""
     last_out = {}
     for _ in range(rounds):
         await page.wait_for_timeout(wait)
         if _is_login_page(page.url, spec.get("login_marks", [])):
+            # JS 异步跳登录页要等一拍才显现, 先等再判
+            if not _is_login_page(page.url, spec.get("login_marks", [])):
+                continue
+            if share_fallback_on and await _share_fallback():
+                return r
             r["errors"] = {"followers": "未登录/登录态失效(先 python main.py login)"}
             await _shot(page, f"{key}_loginwall")
             return r

@@ -47,11 +47,17 @@ def resolve_mode(settings: dict) -> str:
     return "own"
 
 
+MOBILE_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+             "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+             "Version/17.5 Mobile/15E148 Safari/604.1")
+
+
 class BrowserSession:
     """统一入口: acquire_page(platform) 拿一个带登录态的 page, 用完 release。
 
     cdp 模式: 全程共用一个新开 tab(借用户 Chrome 的登录态)。
     own 模式: 同一平台共用一个持久化 context, 换平台才换 context。
+    acquire_mobile_page(): 手机UA的无头独立页(小红书短链公开页兜底)。
     """
 
     def __init__(self, settings: dict, logger):
@@ -63,6 +69,8 @@ class BrowserSession:
         self._page = None             # cdp 模式的共享 tab
         self._ctx = None              # own 模式当前 platform 的 context
         self._ctx_platform = ""
+        self._mobile_browser = None   # 手机UA兜底浏览器(小红书公开页)
+        self._mobile_ctx = None
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -121,6 +129,19 @@ class BrowserSession:
         page.set_default_timeout(45000)
         return page, True
 
+    async def acquire_mobile_page(self):
+        """手机UA的无头独立 page(匿名公开页兜底)。调用方用完 close(page)。"""
+        if self._mobile_ctx is None:
+            self._mobile_browser = await self._pw.chromium.launch(
+                headless=True)
+            self._mobile_ctx = await self._mobile_browser.new_context(
+                user_agent=MOBILE_UA, viewport={"width": 390, "height": 844},
+                locale="zh-CN",
+                extra_http_headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+        page = await self._mobile_ctx.new_page()
+        page.set_default_timeout(45000)
+        return page
+
     async def _close_ctx(self):
         if self._ctx is not None:
             try:
@@ -131,6 +152,19 @@ class BrowserSession:
 
     async def __aexit__(self, *exc):
         await self._close_ctx()
+        for ctx in (self._mobile_ctx,):
+            if ctx is not None:
+                try:
+                    await ctx.close()
+                except Exception:
+                    pass
+        self._mobile_ctx = None
+        if self._mobile_browser is not None:
+            try:
+                await self._mobile_browser.close()
+            except Exception:
+                pass
+            self._mobile_browser = None
         if self._page is not None:
             try:                      # cdp: 只关自己开的 tab, 不动用户 Chrome
                 await self._page.close()
