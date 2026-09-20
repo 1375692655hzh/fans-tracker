@@ -7,3 +7,4 @@ data/
 secret.local.json
 *.tmp
 config/accounts.yaml
+.zcode/

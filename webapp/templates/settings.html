@@ -43,10 +43,10 @@
   <div class="row">
     <input id="tdoc-fid" class="grow" placeholder="腾讯文档 file_id(链接 /sheet/ 后面那段)">
     <button id="btn-fid">保存</button>
+    <button id="btn-tdoc-auth" style="display:none">扫码授权</button>
   </div>
-  <p class="muted">需要用授权账号对该表格有编辑权限。未授权/失效时, 在本项目目录执行
-  <code>python main.py tdoc-auth</code> —— 浏览器 QQ/微信扫码确认一次, 长期有效
-  (写入是纯接口, 不弹窗口)。</p>
+  <p class="muted" id="tdoc-auth-hint">未授权时点「扫码授权」——会新开授权页,
+  用 QQ/微信确认即可, 本控制台自动感知; 写入是纯接口, 日常不弹窗口。</p>
 </div>
 {% endblock %}
 
@@ -62,9 +62,12 @@ async function load() {
   document.getElementById("sc-m").value = s.schedule.minute;
   document.getElementById("hl").checked = s.headless;
   document.getElementById("tdoc-id").textContent = s.tdoc_file_id;
+  document.getElementById("tdoc-fid").value = s.tdoc_file_id || "";
   const tok = document.getElementById("tdoc-token");
   tok.textContent = s.tdoc_token_ok ? "已授权 ✓" : "未授权";
   tok.className = "badge " + (s.tdoc_token_ok ? "ok" : "warn");
+  document.getElementById("btn-tdoc-auth").style.display =
+    s.tdoc_token_ok ? "none" : "";
   document.getElementById("tdoc-fid").value = s.tdoc_file_id || "";
   document.getElementById("task-state").textContent =
     s.task.registered ? "Windows 计划任务已注册: " + s.task.raw
@@ -86,6 +89,26 @@ document.getElementById("btn-hl").onclick = () =>
   post({headless: document.getElementById("hl").checked});
 document.getElementById("btn-fid").onclick = () =>
   post({tdoc_file_id: document.getElementById("tdoc-fid").value.trim()});
+document.getElementById("btn-tdoc-auth").onclick = async () => {
+  const r = await (await fetch("/api/tdoc/auth_start", {method: "POST"})).json();
+  if (r.authorized) { alert(r.msg); load(); return; }
+  window.open(r.auth_url, "_blank");
+  document.getElementById("tdoc-auth-hint").textContent =
+    "等待你在授权页确认…(5分钟内有效, 确认后这里自动变绿)";
+  const timer = setInterval(async () => {
+    const p = await (await fetch("/api/tdoc/auth_poll")).json();
+    if (p.authorized || p.done) {
+      clearInterval(timer);
+      document.getElementById("tdoc-auth-hint").textContent =
+        "✅ 授权成功, Token 已保存(长期有效)";
+      load();
+    } else if (p.failed) {
+      clearInterval(timer);
+      document.getElementById("tdoc-auth-hint").textContent =
+        "授权失败: " + p.failed + " (可重试)";
+    }
+  }, 3000);
+};
 load();
 </script>
 {% endblock %}

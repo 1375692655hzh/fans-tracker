@@ -60,6 +60,49 @@ def save_token(token: str) -> None:
 TOKEN_URL = "https://docs.qq.com/oauth/v2/mcp/token/get"
 AUTH_PAGE = "https://docs.qq.com/scenario/open-claw.html"
 
+# 网页端授权流程状态(webapp 控制台"扫码授权"按钮用)
+_auth_state = {}
+
+
+def start_auth_flow() -> str:
+    """启动后台轮询线程, 返回授权页 URL(前端开新标签页展示给用户扫码)。
+
+    用户在授权页确认后, 轮询线程拿到 Token 自动落盘; 之后
+    load_token() 即有效。"""
+    import secrets
+    import threading
+    import time
+    code = secrets.token_hex(8)
+    url = f"{AUTH_PAGE}?nlc=1&authType=1&code={code}&mcp_source=desktop"
+    _auth_state["code"] = code
+
+    def _poll():
+        for _ in range(100):                   # 3s × 100 ≈ 5 分钟
+            time.sleep(3)
+            try:
+                with urllib.request.urlopen(
+                        f"{TOKEN_URL}?code={code}", timeout=15) as resp:
+                    d = json.loads(resp.read().decode("utf-8"))
+            except Exception:
+                continue
+            tok = ((d.get("data") or {}).get("token") or d.get("token") or "")
+            if tok:
+                save_token(tok)
+                _auth_state["done"] = True
+                return
+            if d.get("error") or d.get("code") in (-1, 1):
+                _auth_state["failed"] = str(d)[:150]
+                return
+
+    threading.Thread(target=_poll, daemon=True).start()
+    return url
+
+
+def auth_flow_status() -> dict:
+    return {"authorized": bool(load_token()),
+            "done": bool(_auth_state.get("done")),
+            "failed": _auth_state.get("failed", "")}
+
 
 def cli_auth() -> int:
     """授权向导: 本地随机 code → 浏览器扫码确认 → 轮询拿 Token 存盘。"""

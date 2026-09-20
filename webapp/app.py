@@ -285,6 +285,25 @@ def _save_yaml(f: Path, d: dict):
 
 # ---------- 手动抓取 ----------
 
+@app.route("/api/tdoc/auth_start", methods=["POST"])
+def api_tdoc_auth_start():
+    """控制台"扫码授权"按钮: 返回授权页 URL, 前端开新标签页。"""
+    import tdoc
+    if tdoc.load_token():
+        return jsonify({"ok": True, "authorized": True,
+                        "msg": "已授权, 无需重复操作"})
+    url = tdoc.start_auth_flow()
+    return jsonify({"ok": True, "authorized": False, "auth_url": url,
+                    "msg": "已打开授权页, 请用 QQ/微信扫码确认"})
+
+
+@app.route("/api/tdoc/auth_poll")
+def api_tdoc_auth_poll():
+    """前端每3秒问一次: 授权完成了吗。"""
+    import tdoc
+    return jsonify(tdoc.auth_flow_status())
+
+
 @app.route("/api/crawl", methods=["POST"])
 def api_crawl_start():
     with _lock:
