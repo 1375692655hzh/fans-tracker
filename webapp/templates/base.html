@@ -14,7 +14,7 @@
   <a href="/settings" class="{% if request.path == '/settings' %}on{% endif %}">设置</a>
   <a href="{% if tdoc_link %}{{ tdoc_link }}{% else %}/settings{% endif %}"{% if tdoc_link %} target="_blank"{% endif %}>{% if tdoc_link %}腾讯文档↗{% else %}腾讯文档(点我去配置){% endif %}</a>
 </nav>
-<main>
+<main class="{% block mainclass %}{% endblock %}">
 {% block body %}{% endblock %}
 </main>
 <footer>fans-tracker · 每日数据自动写入腾讯文档 · <a href="https://github.com/1375692655hzh/fans-tracker" target="_blank">GitHub</a></footer>
