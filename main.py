@@ -95,42 +95,59 @@ def _retryable(result: dict) -> bool:
 
 
 async def _fetch_browser_accounts(accounts: list, settings: dict) -> dict:
-    """浏览器平台逐账号抓。返回 {key: result}。bilibili 附带 API 粉丝兜底。"""
+    """浏览器平台逐账号抓。返回 {key: result}。bilibili 附带 API 粉丝兜底。
+    任何单账号异常只记为该账号的失败, 绝不中断其他账号。"""
     results = {}
     retry = int((settings.get("crawl") or {}).get("retry", 1))
-    async with BrowserSession(settings, log) as sess:
+    try:
+        async with BrowserSession(settings, log) as sess:
+            for acct in accounts:
+                p = acct["platform"]
+                spec = SPEC[p]
+                key = acct["_key"]
+                try:
+                    log.info(f"[{key}] 打开 {acct.get('url')}")
+                    # 多账号平台(xhs/douyin)每账号独立登录态目录
+                    ident = (key.split(":", 1)[1]
+                             if spec.get("login_per_account") else "")
+                    page, _ = await sess.acquire_page(p, ident)
+                    result = await extract_account(page, acct, spec, settings,
+                                                   log, session=sess)
+                    for _ in range(retry):        # 核心指标失败重试
+                        if not _retryable(result):
+                            break
+                        log.info(f"[{key}] 重试一次…")
+                        result = await extract_account(page, acct, spec,
+                                                       settings, log,
+                                                       session=sess)
+                    # bilibili: relation/stat 公开接口兜底粉丝(比页面稳)
+                    if spec.get("api_hook") == "bilibili":
+                        mid = bilibili_api.extract_mid(acct)
+                        v, err = bilibili_api.fetch_followers(mid)
+                        if isinstance(v, int):
+                            if result.get("followers") != v:
+                                log.info(f"[{key}] API 粉丝 {v} 覆盖页面值 "
+                                         f"{result.get('followers')}")
+                            result["followers"] = v
+                            result.get("errors", {}).pop("followers", None)
+                        elif result.get("followers") is None:
+                            result.setdefault("errors", {})["followers"] = \
+                                f"API 也失败: {err}"
+                except Exception as e:            # 单账号崩不影响其余
+                    log.error(f"[{key}] ❌ 抓取异常(已跳过, 继续其他账号): "
+                              f"{type(e).__name__}: {str(e)[:120]}")
+                    result = {"followers": None, "content": None, "views": None,
+                              "errors": {"followers":
+                                         f"抓取异常: {type(e).__name__}: "
+                                         f"{str(e)[:100]}"}}
+                results[key] = result
+                _log_result(key, acct, result)
+    except Exception as e:                        # 浏览器会话级失败(如内核缺失)
+        log.error(f"浏览器会话失败: {type(e).__name__}: {str(e)[:150]}")
         for acct in accounts:
-            p = acct["platform"]
-            spec = SPEC[p]
-            key = acct["_key"]
-            log.info(f"[{key}] 打开 {acct.get('url')}")
-            # 多账号平台(xhs/douyin)每账号独立登录态目录
-            ident = (key.split(":", 1)[1]
-                     if spec.get("login_per_account") else "")
-            page, _ = await sess.acquire_page(p, ident)
-            result = await extract_account(page, acct, spec, settings, log,
-                                           session=sess)
-            for _ in range(retry):        # 核心指标失败重试
-                if not _retryable(result):
-                    break
-                log.info(f"[{key}] 重试一次…")
-                result = await extract_account(page, acct, spec, settings, log,
-                                           session=sess)
-            # bilibili: relation/stat 公开接口兜底粉丝(比页面稳)
-            if spec.get("api_hook") == "bilibili":
-                mid = bilibili_api.extract_mid(acct)
-                v, err = bilibili_api.fetch_followers(mid)
-                if isinstance(v, int):
-                    if result.get("followers") != v:
-                        log.info(f"[{key}] API 粉丝 {v} 覆盖页面值 "
-                                  f"{result.get('followers')}")
-                    result["followers"] = v
-                    result.get("errors", {}).pop("followers", None)
-                elif result.get("followers") is None:
-                    result.setdefault("errors", {})["followers"] = \
-                        f"API 也失败: {err}"
-            results[key] = result
-            _log_result(key, acct, result)
+            results[acct["_key"]] = {
+                "followers": None, "content": None, "views": None,
+                "errors": {"followers": f"浏览器会话失败: {str(e)[:80]}"}}
     return results
 
 
@@ -138,10 +155,17 @@ def _fetch_api_accounts(accounts: list) -> dict:
     results = {}
     for acct in accounts:
         key = acct["_key"]
-        fetch = API_FETCHERS[acct["platform"]]
-        result = fetch(acct)
-        if _retryable(result):            # API 请求轻量, 固定重试一次
+        try:
+            fetch = API_FETCHERS[acct["platform"]]
             result = fetch(acct)
+            if _retryable(result):            # API 请求轻量, 固定重试一次
+                result = fetch(acct)
+        except Exception as e:
+            log.error(f"[{key}] ❌ API 异常(已跳过): "
+                      f"{type(e).__name__}: {str(e)[:120]}")
+            result = {"followers": None, "content": None, "views": None,
+                      "errors": {"followers":
+                                 f"API异常: {type(e).__name__}: {str(e)[:100]}"}}
         results[key] = result
         _log_result(key, acct, result)
     return results
@@ -214,6 +238,24 @@ async def crawl(only=None, do_sync=True) -> int:
         datetime.now().strftime("%H:%M"))
     day["crawled_at"] = day["crawled_at"][-5:]
     hist.save(data)
+
+    # 本轮汇总: 让结果一眼可见(失败的账号照样写表占位, 数据列为-)
+    full = part = fail = manual = 0
+    for rec in day.get("accounts", {}).values():
+        if rec.get("manual"):
+            manual += 1
+            continue
+        errs = rec.get("errors") or {}
+        got = any(rec.get(m) is not None
+                  for m in ("followers", "content", "views"))
+        if not got and errs:
+            fail += 1
+        elif errs:
+            part += 1
+        else:
+            full += 1
+    log.info(f"本轮汇总: 全成功 {full} · 部分成功 {part} · 失败 {fail}"
+             + (f" · 手动填写 {manual}" if manual else ""))
 
     if do_sync:
         return sync(today)
