@@ -25,6 +25,19 @@ BODY_LOGGED_OUT = {
     "weibo": r"^\s*登录\s*\n\s*注册",
 }
 
+# 会话 cookie 判定(优先于页面探测): 这些平台首页对无头浏览器有风控
+# (抖音被跳登录页/快手干脆不渲染), 页面探测不可靠 —— 直接读持久档案里的
+# 会话 cookie: 有会话即已登录, 不访问任何页面, 不受风控影响。
+COOKIE_MARKERS = {
+    "douyin": ["sessionid", "sessionid_ss"],
+    "kuaishou": ["passToken"],
+    "weibo": ["SUB"],
+    "xueqiu": ["xq_a_token"],
+    "zhihu": ["z_c0"],
+    "bilibili": ["SESSDATA", "DedeUserID"],
+    "xhs": ["web_session"],
+}
+
 
 def probe_target(platform: str, ident: str = "") -> tuple:
     """返回 (探测用首页, 登录页URL特征列表)。"""
@@ -51,6 +64,17 @@ async def _probe_async(platform: str, prof: str, home: str,
             viewport={"width": 1280, "height": 860}, locale="zh-CN",
             args=["--disable-blink-features=AutomationControlled"],
             ignore_default_args=["--enable-automation"])
+        markers = COOKIE_MARKERS.get(platform)
+        if markers:                     # cookie 判定: 不访问任何页面
+            cookies = await ctx.cookies()
+            names = {c.get("name", "") for c in cookies}
+            hit = [m for m in markers if m in names]
+            if hit:
+                out.update(logged_in=True, detail=f"会话cookie存在({','.join(hit)})")
+            else:
+                out.update(logged_in=False, detail="无会话cookie(未登录或已退出)")
+            await ctx.close()
+            return out
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
         try:
             await page.goto(home, wait_until="domcontentloaded", timeout=30000)

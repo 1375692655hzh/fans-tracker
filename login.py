@@ -22,7 +22,7 @@ LOGIN_URLS = {
     "xueqiu": ("https://xueqiu.com/", ["login"]),
     "changqiao": ("https://longportapp.com/", ["signin", "login"]),
     "eastmoney": ("https://www.eastmoney.com/", ["passport", "/login"]),
-    "laohu": ("https://www.laohu8.com/", ["login", "signin"]),
+    "laohu": ("https://www.laohu8.com/community", ["login", "signin"]),
     "ths": ("https://t.10jqka.com.cn/", ["login"]),
     "weibo": ("https://weibo.com/", ["newlogin", "login.sina", "/login"]),
     "zhihu": ("https://www.zhihu.com/", ["signin", "/login", "unhuman"]),
