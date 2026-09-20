@@ -153,6 +153,7 @@ SPEC = {
         "content": {"labels": []},
         "views": {"labels": []},
         "home_url": "https://creator.xiaohongshu.com/new/home",
+        "name_res": r"([^\n]{1,30})\n\d{1,4}\n关注数",
         "items": {
             "date_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}",
             "views_res": r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}\s+"
@@ -429,7 +430,12 @@ async def extract_account(page, account, spec, settings, logger,
         # 粉丝拿到且过半轮即收(「昨日内容」统一在循环后解析)
         if r["followers"] is not None and _ > rounds // 2:
             break
-    # 昵称: <title> 前段 / 页面 h1, 谁可用用谁
+    # 昵称: SPEC专属正则 > <title> 前段 > 页面 h1
+    nr = spec.get("name_res")
+    if nr and last_out.get("body"):
+        nm = re.search(nr, last_out["body"])
+        if nm:
+            r["name"] = _clean_title_name(nm.group(1)) or r["name"]
     r["name"] = (_clean_title_name(found_title)
                  or _clean_title_name(last_out.get("h1") or "")) or r["name"]
 
@@ -471,6 +477,8 @@ async def extract_account(page, account, spec, settings, logger,
                 elif yi["count"]:
                     logger.info(f"[{key}] 昨日内容 {yi['count']} 条"
                                 "(平台不公开浏览)")
+                elif yi["count"] == 0:
+                    r["views"] = 0          # 昨日没发, 浏览合计=0(如实)
     for m in ("followers", "content", "views"):
         if r[m] is None and m not in r["errors"]:
             r["errors"][m] = "页面未出现该指标(公开页无此数据)"
