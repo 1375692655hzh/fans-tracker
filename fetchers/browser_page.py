@@ -68,7 +68,7 @@ SPEC = {
                         r"|\d{1,2}-\d{1,2})(\s*\d{1,2}:\d{2})?",
         },
         "items_tab": "原创",   # 默认"动态"tab恒为空, 点"原创"才渲染帖子
-        "login_marks": ["signin", "login"], "needs_login": False, "views_manual": True,
+        "login_marks": ["signin", "login"], "needs_login": False, "views_none": True,
     },
     "eastmoney": {
         "label": "东方财富",
@@ -104,7 +104,7 @@ SPEC = {
         "items": {
             "date_res": r"(\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})",
         },
-        "login_marks": ["login"], "needs_login": False, "views_manual": True,
+        "login_marks": ["login"], "needs_login": False, "views_none": True,
     },
     "weibo": {
         "label": "微博",
@@ -433,7 +433,9 @@ async def extract_account(page, account, spec, settings, logger,
             r["followers"], raw = _first_int(out.get("followers"))
             if r["followers"] is not None:
                 logger.info(f"[{key}] 粉丝 {r['followers']} (原文 {raw!r})")
-        if r["views"] is None and not spec.get("items"):
+        # 统计板累计量(如富途"2.1万 来访")不受 items 影响 —— 一律先抓,
+        # items 的昨日浏览合计(真实配对到才)随后可覆盖
+        if r["views"] is None:
             r["views"], raw = _first_int(out.get("views"))
             if r["views"] is not None:
                 logger.info(f"[{key}] 阅读播放 {r['views']} (原文 {raw!r})")
@@ -520,21 +522,29 @@ async def extract_account(page, account, spec, settings, logger,
                     "内容列表未解析到日期(可能需登录态, 见 README)"
             else:
                 r["content"] = yi["count"]
+                # 浏览量只写"真实抓到"的值: 0 必须有页面证据支撑,
+                # 否则留空人工填(写0=宣称抓得到)
                 if yi["views"] is not None:
                     r["views"] = yi["views"]
                     logger.info(f"[{key}] 昨日内容 {yi['count']} 条, "
                                 f"浏览合计 {yi['views']}")
-                elif yi["count"]:
-                    logger.info(f"[{key}] 昨日内容 {yi['count']} 条"
-                                "(平台不公开浏览)")
-                elif yi["count"] == 0:
-                    r["views"] = 0          # 昨日没发, 浏览合计=0(如实)
+                elif r["views"] is None:
+                    if yi.get("views_seen") and yi["count"] == 0:
+                        r["views"] = 0   # 页面展示浏览数据(能力证实)且昨日无帖
+                    elif yi["count"] == 0:
+                        r.setdefault("errors", {})["views"] =                             "页面未展示浏览数据(无法自动取值, 留空人工填)"
+                    else:
+                        logger.info(f"[{key}] 昨日内容 {yi['count']} 条"
+                                    "(平台不公开浏览)")
     # 浏览量人工填写型平台: 非号主拿不到(或平台无此机制),
     # 强制置空, 表格端保留用户手填值, 不用自动值/0覆盖
     # (措辞避开"登录"字样, 以免控制台误报"登录类报错")
     if spec.get("views_manual"):
         r["views"] = None
         r["errors"]["views"] = "浏览量由人工在表格填写(平台不向非号主公开)"
+    elif spec.get("views_none"):
+        r["views"] = None
+        r["errors"]["views"] = "平台无浏览量机制(作者亦不可见, 表格填-)"
     for m in ("followers", "content", "views"):
         if r[m] is None and m not in r["errors"]:
             r["errors"][m] = "页面未出现该指标(公开页无此数据)"
@@ -596,11 +606,13 @@ def parse_yesterday_items(body: str, cfg: dict, now, logger=None) -> dict:
     dates = [(m.start(), m.group(0))
              for m in re.finditer(cfg["date_res"], body)]
     if not dates:
-        return {"count": 0, "views": None, "dated": 0}
+        vs = len(re.findall(cfg.get("views_res") or r"(?!x)x", body))
+        return {"count": 0, "views": None, "dated": 0, "views_seen": vs}
     ycnt = sum(1 for _, tok in dates
                if _classify_item_date(tok, now) == yesterday)
     if not cfg.get("views_res"):
-        return {"count": ycnt, "views": None, "dated": len(dates)}
+        return {"count": ycnt, "views": None, "dated": len(dates),
+                "views_seen": 0}
     window = int(cfg.get("window", 100))
     pair = cfg.get("pair", "nearest")
     views = []
@@ -644,4 +656,4 @@ def parse_yesterday_items(body: str, cfg: dict, now, logger=None) -> dict:
                     f"浏览{len(views)}个, 昨日浏览明细{yviews[:5]}")
     return {"count": ycnt,
             "views": sum(yviews) if yviews else None,
-            "dated": len(dates)}
+            "dated": len(dates), "views_seen": len(views)}

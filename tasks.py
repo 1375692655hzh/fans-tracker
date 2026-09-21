@@ -41,10 +41,12 @@ def register_schedule(hour: int = 9, minute: int = 0, enabled: bool = True) -> s
             msgs.append(f"移除登录启动项失败: {e}")
         return "; ".join(msgs)
     st = f"{max(0, min(23, int(hour))):02d}:{max(0, min(59, int(minute))):02d}"
-    code, out = _schtasks(["/Create", "/TN", TASK_DAILY, "/TR", str(BAT),
+    # /TR 必须加引号: 安装路径含空格时会被解析成执行 "D:\AI"
+    # → 0x80070002 文件未找到, 任务静默失败(手动跑bat不暴露)
+    code, out = _schtasks(["/Create", "/TN", TASK_DAILY, "/TR", f'"{BAT}"',
                            "/SC", "DAILY", "/ST", st, "/F"])
     msgs.append(f"每天 {st}: {out or 'ok'}")
-    code, out = _schtasks(["/Create", "/TN", TASK_CATCHUP, "/TR", str(BAT),
+    code, out = _schtasks(["/Create", "/TN", TASK_CATCHUP, "/TR", f'"{BAT}"',
                            "/SC", "ONLOGON", "/F"])
     if code != 0:                       # 非管理员: ONLOGON 计划任务建不了
         out = _catchup_via_hkcu()       # 降级 HKCU Run 键, 免管理员, 效果等价

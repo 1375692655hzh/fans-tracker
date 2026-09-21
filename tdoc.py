@@ -15,6 +15,7 @@ Token 过期(400006)时提示重新授权。
 import csv
 import io
 import json
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -149,16 +150,21 @@ class SheetClient:
                             "python main.py tdoc-auth 扫码授权一次即可")
 
     def call(self, tool: str, arguments: dict) -> dict:
-        """sheet-mcp 工具名不带 sheet. 前缀; 个别环境带前缀, 自动回退。"""
+        """sheet-mcp 工具名不带 sheet. 前缀; 个别环境带前缀, 自动回退。
+        6086105「获取权限数据失败」为服务端间歇性故障 → 指数退避重试。"""
         last_err = None
         for name in (tool, f"sheet.{tool}"):
-            try:
-                return self._post(name, arguments)
-            except TDocError as e:
-                if "tool not found" in str(e) and name != f"sheet.{tool}":
+            for attempt in range(3):
+                try:
+                    return self._post(name, arguments)
+                except TDocError as e:
                     last_err = e
-                    continue
-                raise
+                    if "tool not found" in str(e) and name != f"sheet.{tool}":
+                        break                     # 换带前缀的名字再试
+                    if ("6086105" in str(e) or "获取权限数据失败" in str(e))                             and attempt < 2:
+                        time.sleep(2 ** attempt)  # 1s/2s 退避
+                        continue
+                    raise
         raise last_err or TDocError(f"{tool}: 调用失败")
 
     def _post(self, tool: str, arguments: dict) -> dict:
@@ -242,6 +248,25 @@ class SheetClient:
                     for r in range(nrow)]
         txt = (data.get("csv") if isinstance(data, dict) else "") or ""
         return [r for r in csv.reader(io.StringIO(txt)) if r]
+
+
+GRAY_BG = "FFF2F2F2"
+
+
+def _gray_blank_cells(cli, file_id, sheet_id, n_rows, n_cols, logger=None):
+    """数据区「空单元格→灰底」, 一条条件格式规则(每天1次调用, 优于逐格
+    set_cell_style —— sheet-mcp 文档严禁连续3次以上单条写入)。
+    注意 rule.style 字段名是 bg_color(不是 background_color, 报错6086106)。"""
+    rng = f"A2:{chr(ord('A') + n_cols - 1)}{n_rows + 1}"
+    try:
+        cli.call("add_conditional_format", {
+            "file_id": file_id, "sheet_id": sheet_id,
+            "ranges": [rng],
+            "rule": {"type": "CF_CELL_IS",
+                     "cell_is": {"operator": "EQ", "formulas": ['""']},
+                     "style": {"bg_color": GRAY_BG}}})
+    except Exception as e:
+        (logger.warning if logger else print)(f"条件格式灰底失败(完整: {e})")
 
 
 def _csv_cell(v):
@@ -338,27 +363,48 @@ def sync_day(hist_day: dict, settings: dict, logger, date: str = "") -> str:
             logger.warning(f"读取现有表格失败(手动行保留跳过): {e}")
 
     vcol = header.index("阅读/播放量") if "阅读/播放量" in header else -1
+    ccol = header.index("内容数") if "内容数" in header else -1
+    gcol = header.index("增粉") if "增粉" in header else -1
     rows = [list(header)]
     for key in sorted(accounts):
         rec = accounts[key]
         row = [_field(col, rec, key) for col in header]
         sp = _SPEC.get(rec.get("platform", ""), {}) or {}
+        old = existing.get((str(row[0]), str(row[1]), str(row[2])))
+
+        def _keep_user(i, zero_is_fill=False):
+            """用户已填 → 保留原值返回True。"""
+            if old and i < len(old):
+                ov = str(old[i]).strip()
+                skip = ("-",) if zero_is_fill else ("-", "0")
+                if ov and ov not in skip:
+                    row[i] = old[i]
+                    return True
+            return False
+
         if rec.get("manual") or sp.get("manual"):
-            old = existing.get((str(row[0]), str(row[1]), str(row[2])))
-            if old:
-                for i in range(3, len(row)):    # 身份三列外的数据列
-                    ov = str(old[i]).strip() if i < len(old) else ""
-                    if ov and ov != "-":
-                        row[i] = old[i]
+            for i in range(3, len(row)):  # 全行数据列待手填
+                if not _keep_user(i, zero_is_fill=True):
+                    row[i] = ""
         elif sp.get("views_manual") and vcol >= 0:
-            # 仅保留浏览量列的人工值; "0"是旧版自动写的占位(昨日无发帖=0),
-            # 不当作人工值保留, 让用户重新手填
-            old = existing.get((str(row[0]), str(row[1]), str(row[2])))
-            if old and vcol < len(old):
-                ov = str(old[vcol]).strip()
-                if ov and ov not in ("-", "0"):
-                    row[vcol] = old[vcol]
+            if not _keep_user(vcol):     # "0"是旧自动占位, 视为未填
+                row[vcol] = ""
+        # 浏览量没抓到的一律留空; views_none 型保留 "-" 与待手填区分
+        if vcol >= 0 and str(row[vcol]) == "-"                 and not sp.get("views_none")                 and not (rec.get("manual") or sp.get("manual")):
+            row[vcol] = ""
+        # 内容数: 仅"平台根本无此数据"保留"-"; 解析失败/待计算 → 留空
+        if ccol >= 0 and str(row[ccol]) == "-"                 and "页面未出现该指标" not in (
+                    (rec.get("errors") or {}).get("content") or ""):
+            row[ccol] = ""
+        # 内容数「明日可算」/增粉无基准 → 空着(次日自动出数)
+        if ccol >= 0 and rec.get("content") is None                 and "24h发布数明日可算" in (
+                    (rec.get("errors") or {}).get("content") or ""):
+            row[ccol] = ""
+        if gcol >= 0 and isinstance(rec.get("followers"), int)                 and str(row[gcol]) == "-":
+            row[gcol] = ""
         rows.append(row)
     cli.write_csv(file_id, sheet_id, rows)
+    _gray_blank_cells(cli, file_id, sheet_id, len(rows) - 1, len(header),
+                      logger)
     logger.info(f"腾讯文档: 已写入 {len(rows) - 1} 个账号 → sheet「{date}」")
     return sheet_id
